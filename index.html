@@ -123,7 +123,7 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
 <!-- TIMER BAR (visible during workouts) -->
 <div id="timer-bar" onclick="Timer.toggle()">
   <span id="timer-text">RESTING 0:00</span>
-  <div class="sub">tap to toggle work / rest</div>
+  <div class="sub" id="timer-sub">tap to toggle work / rest</div>
 </div>
 
 <!-- SETUP PAGE -->
@@ -488,11 +488,22 @@ const Timer = {
   seconds: 0,
   interval: null,
   nudged: false,
+  // Auto-tracking: log every work/rest period
+  periods: [],       // { type: 'work'|'rest', duration: seconds }
+  periodStart: null,  // timestamp when current period started
 
   start(mode) {
+    // Log the previous period if there was one
+    if (this.state !== 'idle' && this.periodStart) {
+      const dur = Math.round((Date.now() - this.periodStart) / 1000);
+      if (dur > 0) {
+        this.periods.push({ type: this.state === 'working' ? 'work' : 'rest', duration: dur });
+      }
+    }
     this.state = mode;
     this.seconds = 0;
     this.nudged = false;
+    this.periodStart = Date.now();
     this.updateUI();
     if (this.interval) clearInterval(this.interval);
     this.interval = setInterval(() => {
@@ -517,24 +528,53 @@ const Timer = {
   },
 
   stop() {
+    // Log final period
+    if (this.state !== 'idle' && this.periodStart) {
+      const dur = Math.round((Date.now() - this.periodStart) / 1000);
+      if (dur > 0) {
+        this.periods.push({ type: this.state === 'working' ? 'work' : 'rest', duration: dur });
+      }
+    }
     this.state = 'idle';
     if (this.interval) clearInterval(this.interval);
     this.interval = null;
     document.getElementById('timer-bar').style.display = 'none';
   },
 
+  reset() {
+    this.periods = [];
+    this.periodStart = null;
+  },
+
   show() {
     document.getElementById('timer-bar').style.display = 'block';
+  },
+
+  // Get summary stats
+  getSummary() {
+    const work = this.periods.filter(p => p.type === 'work');
+    const rest = this.periods.filter(p => p.type === 'rest');
+    const totalWork = work.reduce((s, p) => s + p.duration, 0);
+    const totalRest = rest.reduce((s, p) => s + p.duration, 0);
+    const avgRest = rest.length ? Math.round(totalRest / rest.length) : 0;
+    const maxRest = rest.length ? Math.max(...rest.map(p => p.duration)) : 0;
+    const restOver = rest.filter(p => p.duration > (Store.get('profile', {}).nudge || 120)).length;
+    return { totalWork, totalRest, avgRest, maxRest, restPeriods: rest.length, workPeriods: work.length, restOver };
   },
 
   updateUI() {
     const bar = document.getElementById('timer-bar');
     const txt = document.getElementById('timer-text');
+    const sub = document.getElementById('timer-sub');
     const nudge = Store.get('profile', {}).nudge || 120;
     bar.className = '';
     if (this.state === 'working') {
       bar.classList.add('working');
       txt.textContent = 'WORKING ' + fmtTime(this.seconds);
+      const summary = this.getSummary();
+      sub.textContent = summary.restPeriods > 0
+        ? `avg rest: ${fmtTime(summary.avgRest)} · ${summary.restOver} over ${fmtTime(nudge)}`
+        : 'tap to toggle work / rest';
     } else if (this.state === 'resting') {
       if (this.seconds >= nudge) {
         bar.classList.add('danger');
@@ -546,6 +586,10 @@ const Timer = {
         bar.classList.add('resting');
         txt.textContent = 'REST ' + fmtTime(this.seconds);
       }
+      const summary = this.getSummary();
+      sub.textContent = summary.restPeriods > 0
+        ? `avg rest: ${fmtTime(summary.avgRest)} · longest: ${fmtTime(summary.maxRest)}`
+        : 'tap to toggle work / rest';
     }
   }
 };
@@ -730,6 +774,7 @@ const Workout = {
     this.loadPreviousWeights();
 
     Store.set('activeWorkout', this.data);
+    Timer.reset();
     Timer.show();
     Timer.start('working');
     Nav.current = 'workout';
@@ -943,6 +988,9 @@ const Workout = {
     const d = this.data;
     const duration = Math.round((Date.now() - d.startTime) / 60000);
 
+    // Capture timer stats before stopping
+    const timerSummary = Timer.getSummary();
+
     // Save workout record
     const record = {
       date: new Date().toISOString().split('T')[0],
@@ -953,6 +1001,7 @@ const Workout = {
       dayName: d.dayName,
       duration,
       completed,
+      timer: timerSummary,
       exercises: d.exercises.filter(e => !e.skipped).map(e => ({
         name: e.name,
         lift: e.lift,
@@ -1159,7 +1208,7 @@ const History = {
           <span style="font-weight:700">Day ${w.dayLabel}: ${w.dayName}</span>
           <span class="text-dim text-sm">${w.date}</span>
         </div>
-        <div class="text-sm text-dim mb-8">Week ${w.absWeek} &middot; ${w.duration} min ${w.completed ? '' : '(partial)'}</div>`;
+        <div class="text-sm text-dim mb-8">Week ${w.absWeek} &middot; ${w.duration} min ${w.completed ? '' : '(partial)'}${w.timer ? ` &middot; work ${Math.round(w.timer.totalWork/60)}m / rest ${Math.round(w.timer.totalRest/60)}m &middot; avg rest ${Math.floor(w.timer.avgRest/60)}:${String(w.timer.avgRest%60).padStart(2,'0')}${w.timer.restOver ? ' &middot; <span style="color:var(--danger)">' + w.timer.restOver + ' over limit</span>' : ''}` : ''}</div>`;
 
       if (w.exercises) {
         w.exercises.forEach(ex => {
