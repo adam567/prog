@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0f0f1a">
+<title>PH3 Tracker</title>
+<link rel="manifest" href="manifest.json">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0f0f1a;--surface:#1a1a2e;--surface2:#232342;--surface3:#2d2d52;
+  --primary:#4361ee;--accent:#f72585;--success:#06d6a0;--warning:#ffd166;--danger:#ef476f;
+  --text:#e8e8f0;--dim:#7777a0;--radius:12px;
+}
+html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);font-size:16px;overflow:hidden}
+#app{height:100%;display:flex;flex-direction:column}
+.page{flex:1;overflow-y:auto;padding:16px 16px 80px;display:none}
+.page.active{display:block}
+h1{font-size:1.4rem;margin-bottom:12px}
+h2{font-size:1.1rem;color:var(--dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;font-size:.8rem}
+.card{background:var(--surface);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+.card-title{font-weight:700;font-size:1rem;margin-bottom:8px}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:12px 24px;border-radius:var(--radius);border:none;font-size:1rem;font-weight:600;cursor:pointer;transition:opacity .15s;width:100%;color:#fff}
+.btn:active{opacity:.7}
+.btn-primary{background:var(--primary)}
+.btn-success{background:var(--success);color:#000}
+.btn-danger{background:var(--danger)}
+.btn-outline{background:transparent;border:2px solid var(--surface3);color:var(--text)}
+.btn-sm{padding:8px 16px;font-size:.85rem;width:auto}
+.btn-xs{padding:4px 10px;font-size:.75rem;width:auto;border-radius:8px}
+input[type=number],input[type=text],select{background:var(--surface2);border:2px solid var(--surface3);color:var(--text);padding:10px 14px;border-radius:8px;font-size:1.1rem;width:100%;-moz-appearance:textfield}
+input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+input:focus,select:focus{outline:none;border-color:var(--primary)}
+.input-group{margin-bottom:12px}
+.input-group label{display:block;font-size:.85rem;color:var(--dim);margin-bottom:4px}
+.row{display:flex;gap:8px;align-items:center}
+.flex-1{flex:1}
+.progress-bar{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;margin:8px 0}
+.progress-fill{height:100%;background:var(--primary);border-radius:3px;transition:width .3s}
+.badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:.7rem;font-weight:700;text-transform:uppercase}
+.badge-blue{background:var(--primary);color:#fff}
+.badge-green{background:var(--success);color:#000}
+.badge-amber{background:var(--warning);color:#000}
+.badge-red{background:var(--danger);color:#fff}
+.text-dim{color:var(--dim)}
+.text-sm{font-size:.85rem}
+.text-center{text-align:center}
+.mb-8{margin-bottom:8px}
+.mb-16{margin-bottom:16px}
+.mt-8{margin-top:8px}
+.mt-16{margin-top:16px}
+.gap-8{gap:8px}
+
+/* Timer */
+#timer-bar{display:none;position:sticky;top:0;z-index:100;padding:12px 16px;text-align:center;font-size:1.3rem;font-weight:700;letter-spacing:1px;cursor:pointer;transition:background .3s;user-select:none}
+#timer-bar.working{background:var(--success);color:#000}
+#timer-bar.resting{background:var(--primary);color:#fff}
+#timer-bar.warning{background:var(--warning);color:#000}
+#timer-bar.danger{background:var(--danger);color:#fff;animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.7}}
+#timer-bar .sub{font-size:.75rem;font-weight:400;opacity:.8}
+
+/* Exercise card in workout */
+.ex-card{background:var(--surface);border-radius:var(--radius);margin-bottom:12px;overflow:hidden}
+.ex-header{padding:14px 16px;display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+.ex-header .name{font-weight:700;font-size:.95rem}
+.ex-header .info{font-size:.8rem;color:var(--dim)}
+.ex-body{padding:0 16px 14px}
+.set-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--surface2)}
+.set-row:last-child{border:none}
+.set-label{width:48px;font-size:.8rem;color:var(--dim);flex-shrink:0}
+.set-goal{font-size:.85rem;color:var(--dim);flex:1}
+.set-actual{display:flex;align-items:center;gap:4px}
+.set-actual input{width:52px;padding:6px;text-align:center;font-size:.95rem}
+.set-actual .x{color:var(--dim);font-size:.85rem}
+.set-check{width:36px;height:36px;border-radius:8px;border:2px solid var(--surface3);background:transparent;color:var(--dim);font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.set-check.done{background:var(--success);border-color:var(--success);color:#000}
+.set-check.amrap-done{background:var(--warning);border-color:var(--warning);color:#000}
+.amrap-badge{background:var(--warning);color:#000;padding:1px 6px;border-radius:4px;font-size:.65rem;font-weight:700;margin-left:4px}
+.skip-btn{font-size:.75rem;color:var(--dim);background:none;border:none;cursor:pointer;padding:4px 8px}
+
+/* Adjust buttons */
+.adj{width:32px;height:32px;border-radius:6px;border:1px solid var(--surface3);background:var(--surface2);color:var(--text);font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.adj:active{background:var(--primary)}
+
+/* Bottom nav */
+#nav{display:flex;background:var(--surface);border-top:1px solid var(--surface2);padding:6px 0 env(safe-area-inset-bottom)}
+#nav button{flex:1;background:none;border:none;color:var(--dim);font-size:.65rem;padding:8px 0;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px}
+#nav button.active{color:var(--primary)}
+#nav button svg{width:22px;height:22px}
+
+/* Cardio */
+.cardio-entry{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--surface2)}
+.cardio-entry:last-child{border:none}
+
+/* Block review */
+.lift-review{background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:10px}
+.lift-review .lift-name{font-weight:700;margin-bottom:6px}
+.lift-review .row{margin-top:6px}
+
+/* History */
+.hist-entry{padding:12px 0;border-bottom:1px solid var(--surface2)}
+.hist-entry:last-child{border:none}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- TIMER BAR (visible during workouts) -->
+<div id="timer-bar" onclick="Timer.toggle()">
+  <span id="timer-text">RESTING 0:00</span>
+  <div class="sub">tap to toggle work / rest</div>
+</div>
+
+<!-- SETUP PAGE -->
+<div id="page-setup" class="page">
+  <h1>Welcome to PH3 Tracker</h1>
+  <p class="text-dim mb-16">Enter your current estimated 1-rep maxes to generate your 13-week program.</p>
+  <div class="input-group"><label>Squat 1RM (lb)</label><input type="number" id="setup-squat" value="285" step="5"></div>
+  <div class="input-group"><label>Bench Press 1RM (lb)</label><input type="number" id="setup-bench" value="170" step="5"></div>
+  <div class="input-group"><label>Deadlift 1RM (lb)</label><input type="number" id="setup-deadlift" value="285" step="5"></div>
+  <div class="input-group"><label>Bodyweight (lb)</label><input type="number" id="setup-bw" value="230" step="1"></div>
+  <div class="input-group"><label>Rest Timer Nudge (seconds)</label><input type="number" id="setup-nudge" value="120" step="15"></div>
+  <button class="btn btn-primary mt-16" onclick="App.finishSetup()">Start Program</button>
+</div>
+
+<!-- HOME PAGE -->
+<div id="page-home" class="page">
+  <div id="home-content"></div>
+</div>
+
+<!-- WORKOUT PAGE -->
+<div id="page-workout" class="page" style="padding-top:0">
+  <div id="workout-content"></div>
+</div>
+
+<!-- BLOCK REVIEW PAGE -->
+<div id="page-review" class="page">
+  <div id="review-content"></div>
+</div>
+
+<!-- CARDIO PAGE -->
+<div id="page-cardio" class="page">
+  <h1>Cardio Log</h1>
+  <div class="card">
+    <div class="input-group"><label>Type</label>
+      <select id="cardio-type">
+        <option>Walk</option><option>Run</option><option>Run (Strava)</option>
+        <option>Run (HR Monitor)</option><option>Hill Sprints</option>
+        <option>Treadmill Sprints</option><option>Other</option>
+      </select>
+    </div>
+    <div class="row gap-8">
+      <div class="flex-1 input-group"><label>Duration (min)</label><input type="number" id="cardio-dur" step="1"></div>
+      <div class="flex-1 input-group"><label>Distance (mi)</label><input type="number" id="cardio-dist" step="0.1"></div>
+    </div>
+    <div class="row gap-8">
+      <div class="flex-1 input-group"><label>Avg HR (optional)</label><input type="number" id="cardio-hr" step="1"></div>
+      <div class="flex-1 input-group"><label>Calories (optional)</label><input type="number" id="cardio-cal" step="1"></div>
+    </div>
+    <div class="input-group"><label>Notes</label><input type="text" id="cardio-notes" placeholder="How'd it feel?"></div>
+    <button class="btn btn-success" onclick="Cardio.add()">Log Cardio</button>
+  </div>
+  <h2 class="mt-16">Recent</h2>
+  <div id="cardio-list" class="card"></div>
+</div>
+
+<!-- HISTORY PAGE -->
+<div id="page-history" class="page">
+  <h1>History</h1>
+  <div id="history-content"></div>
+</div>
+
+<!-- SETTINGS PAGE -->
+<div id="page-settings" class="page">
+  <h1>Settings</h1>
+  <div class="card">
+    <div class="card-title">Override 1RM</div>
+    <p class="text-dim text-sm mb-8">Change any lift's working max. Takes effect on your next workout.</p>
+    <div class="input-group"><label>Squat</label><input type="number" id="set-squat" step="5"></div>
+    <div class="input-group"><label>Bench</label><input type="number" id="set-bench" step="5"></div>
+    <div class="input-group"><label>Deadlift</label><input type="number" id="set-deadlift" step="5"></div>
+    <div class="input-group"><label>Bodyweight</label><input type="number" id="set-bw" step="1"></div>
+    <button class="btn btn-primary btn-sm" onclick="Settings.saveMaxes()">Update</button>
+  </div>
+  <div class="card mt-16">
+    <div class="card-title">Rest Timer</div>
+    <div class="input-group"><label>Nudge after (seconds)</label><input type="number" id="set-nudge" step="15"></div>
+    <button class="btn btn-outline btn-sm" onclick="Settings.saveNudge()">Update</button>
+  </div>
+  <div class="card mt-16">
+    <div class="card-title">Data</div>
+    <div class="row gap-8 mb-8">
+      <button class="btn btn-outline btn-sm flex-1" onclick="Settings.exportData()">Export JSON</button>
+      <button class="btn btn-outline btn-sm flex-1" onclick="document.getElementById('import-file').click()">Import JSON</button>
+      <input type="file" id="import-file" accept=".json" style="display:none" onchange="Settings.importData(this)">
+    </div>
+    <button class="btn btn-danger btn-sm mt-8" onclick="Settings.resetAll()">Reset Everything</button>
+  </div>
+  <p class="text-dim text-sm text-center mt-16">PH3 Tracker v1.0 &middot; Inspired by Layne Norton's PH3</p>
+</div>
+
+<!-- BOTTOM NAV -->
+<nav id="nav">
+  <button onclick="Nav.go('home')" id="nav-home">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9"/><path d="M5 10v10h14V10"/></svg>
+    Home
+  </button>
+  <button onclick="Nav.go('cardio')" id="nav-cardio">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+    Cardio
+  </button>
+  <button onclick="Nav.go('history')" id="nav-history">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
+    History
+  </button>
+  <button onclick="Nav.go('settings')" id="nav-settings">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    Settings
+  </button>
+</nav>
+
+</div>
+
+<script>
+// ===================== STORAGE =====================
+const Store = {
+  get(k, def) { try { const v = localStorage.getItem('ph3_' + k); return v ? JSON.parse(v) : def; } catch { return def; } },
+  set(k, v) { localStorage.setItem('ph3_' + k, JSON.stringify(v)); },
+  getAll() {
+    return {
+      profile: Store.get('profile', null),
+      program: Store.get('program', null),
+      workouts: Store.get('workouts', []),
+      cardio: Store.get('cardio', []),
+      activeWorkout: Store.get('activeWorkout', null),
+    };
+  }
+};
+
+// ===================== PROGRAM DEFINITION =====================
+const BLOCKS = [
+  { // ACCUMULATION (weeks 1-4) - uses initial 1RM
+    name: 'Accumulation', weeks: 4,
+    days: [
+      { name: 'Squat / Bench / Deadlift', label: 'A',
+        main: [
+          { lift: 'squat', pct: 0.725, reps: 9, sets: 2 },
+          { lift: 'bench', pct: 0.725, reps: 9, sets: 2 },
+          { lift: 'deadlift', pct: 0.725, reps: 7, sets: 2 },
+        ],
+        acc: [
+          { name: 'Box Jumps', reps: '5', sets: 3, rir: null },
+        ]
+      },
+      { name: 'Upper Hypertrophy', label: 'B', main: [],
+        acc: [
+          { name: 'DB Press (Flat/Incline)', reps: '6-8', sets: 2, rir: 3 },
+          { name: 'Pullups', reps: 'max', sets: 3, rir: 2 },
+          { name: 'Bent Row', reps: '8-10', sets: 2, rir: 2 },
+          { name: 'OHP / Military Press', reps: '5-7', sets: 2, rir: 3 },
+          { name: 'DB Curl', reps: '6-8', sets: 3, rir: 1 },
+          { name: 'Tricep Extension', reps: '6-8', sets: 3, rir: 1 },
+          { name: 'KB Swings (49 lb)', reps: '15-20', sets: 2, rir: null },
+        ]
+      },
+      { name: 'Squat / Bench / Legs', label: 'C',
+        main: [
+          { lift: 'squat', pct: 0.775, reps: 7, sets: 3 },
+          { lift: 'bench', pct: 0.775, reps: 7, sets: 3 },
+        ],
+        acc: [
+          { name: 'Stiff-Leg Deadlift', reps: '8-10', sets: 2, rir: 3 },
+          { name: 'Bulgarian Split Squat', reps: '8-10', sets: 2, rir: 3 },
+        ]
+      },
+      { name: 'Deadlift / Bench / Upper', label: 'D',
+        main: [
+          { lift: 'deadlift', pct: 0.825, reps: 4, sets: 2 },
+          { lift: 'bench', pct: 0.825, reps: 5, sets: 3 },
+        ],
+        acc: [
+          { name: 'DB Fly', reps: '12-15', sets: 2, rir: 3 },
+          { name: 'Pullups', reps: 'max', sets: 2, rir: 2 },
+          { name: 'DB Row', reps: '10-12', sets: 2, rir: 2 },
+          { name: 'Lateral Raise', reps: '12-15', sets: 2, rir: 2 },
+        ]
+      },
+    ]
+  },
+  { // INTERMEDIATE (weeks 5-8) - updated maxes
+    name: 'Intermediate', weeks: 4,
+    days: [
+      { name: 'Squat / Bench / Deadlift', label: 'A',
+        main: [
+          { lift: 'squat', pct: 0.75, reps: 8, sets: 2 },
+          { lift: 'bench', pct: 0.75, reps: 8, sets: 2 },
+          { lift: 'deadlift', pct: 0.75, reps: 6, sets: 2 },
+        ],
+        acc: [{ name: 'Box Jumps', reps: '5', sets: 3, rir: null }]
+      },
+      { name: 'Upper Hypertrophy', label: 'B', main: [],
+        acc: [
+          { name: 'DB Press (Flat/Incline)', reps: '8-10', sets: 2, rir: 3 },
+          { name: 'Pullups', reps: 'max', sets: 3, rir: 2 },
+          { name: 'Bent Row', reps: '8-10', sets: 2, rir: 2 },
+          { name: 'OHP / Military Press', reps: '6-8', sets: 2, rir: 3 },
+          { name: 'DB Curl', reps: '8-10', sets: 3, rir: 1 },
+          { name: 'Tricep Extension', reps: '8-10', sets: 3, rir: 1 },
+          { name: 'KB Swings (49 lb)', reps: '15-20', sets: 2, rir: null },
+        ]
+      },
+      { name: 'Squat / Bench / Legs', label: 'C',
+        main: [
+          { lift: 'squat', pct: 0.80, reps: 6, sets: 3 },
+          { lift: 'bench', pct: 0.80, reps: 6, sets: 3 },
+        ],
+        acc: [
+          { name: 'Stiff-Leg Deadlift', reps: '8-10', sets: 2, rir: 3 },
+          { name: 'Front Squat', reps: '8-10', sets: 2, rir: 3 },
+        ]
+      },
+      { name: 'Deadlift / Bench / Upper', label: 'D',
+        main: [
+          { lift: 'deadlift', pct: 0.85, reps: 3, sets: 3 },
+          { lift: 'bench', pct: 0.85, reps: 4, sets: 4 },
+        ],
+        acc: [
+          { name: 'DB Fly', reps: '12-15', sets: 2, rir: 3 },
+          { name: 'Pullups', reps: 'max', sets: 2, rir: 2 },
+          { name: 'DB Row', reps: '10-12', sets: 2, rir: 2 },
+          { name: 'Lateral Raise', reps: '12-15', sets: 2, rir: 2 },
+        ]
+      },
+    ]
+  },
+  { // INTENSITY (weeks 9-12) - updated maxes again
+    name: 'Intensity', weeks: 4,
+    days: [
+      { name: 'Squat / Bench / Deadlift', label: 'A',
+        main: [
+          { lift: 'squat', pct: 0.775, reps: 7, sets: 3 },
+          { lift: 'bench', pct: 0.775, reps: 7, sets: 3 },
+          { lift: 'deadlift', pct: 0.775, reps: 5, sets: 3 },
+        ],
+        acc: []
+      },
+      { name: 'Upper Hypertrophy', label: 'B', main: [],
+        acc: [
+          { name: 'DB Press (Flat/Incline)', reps: '6-8', sets: 2, rir: 3 },
+          { name: 'Pullups', reps: 'max', sets: 3, rir: 2 },
+          { name: 'Bent Row', reps: '6-8', sets: 3, rir: 2 },
+          { name: 'OHP / Military Press', reps: '5-7', sets: 2, rir: 3 },
+          { name: 'DB Curl', reps: '6-8', sets: 3, rir: 1 },
+          { name: 'Tricep Extension', reps: '6-8', sets: 3, rir: 1 },
+        ]
+      },
+      { name: 'Squat / Bench / Legs', label: 'C',
+        main: [
+          { lift: 'squat', pct: 0.825, reps: 5, sets: 4 },
+          { lift: 'bench', pct: 0.825, reps: 5, sets: 4 },
+        ],
+        acc: [
+          { name: 'Stiff-Leg Deadlift', reps: '8-10', sets: 2, rir: 3 },
+          { name: 'Front Squat', reps: '6-8', sets: 2, rir: 3 },
+        ]
+      },
+      { name: 'Deadlift / Bench / Upper', label: 'D',
+        main: [
+          { lift: 'deadlift', pct: 0.875, reps: 2, sets: 4 },
+          { lift: 'bench', pct: 0.875, reps: 3, sets: 4 },
+        ],
+        acc: [
+          { name: 'DB Fly', reps: '12-15', sets: 2, rir: 3 },
+          { name: 'Pullups', reps: 'max', sets: 2, rir: 2 },
+        ]
+      },
+    ]
+  },
+  { // TAPER (week 13)
+    name: 'Taper', weeks: 1,
+    days: [
+      { name: 'Heavy Triples', label: 'A',
+        main: [
+          { lift: 'squat', pct: 0.825, reps: 3, sets: 5 },
+          { lift: 'bench', pct: 0.825, reps: 3, sets: 5 },
+          { lift: 'deadlift', pct: 0.775, reps: 3, sets: 4 },
+        ], acc: []
+      },
+      { name: 'Light Recovery', label: 'B', main: [],
+        acc: [
+          { name: 'Light DB Press', reps: '12-15', sets: 2, rir: 4 },
+          { name: 'Light Rows', reps: '12-15', sets: 2, rir: 4 },
+          { name: 'Light Curls', reps: '12-15', sets: 2, rir: 4 },
+        ]
+      },
+      { name: 'Speed Work', label: 'C',
+        main: [
+          { lift: 'squat', pct: 0.725, reps: 4, sets: 4 },
+          { lift: 'bench', pct: 0.725, reps: 4, sets: 4 },
+          { lift: 'deadlift', pct: 0.70, reps: 3, sets: 3 },
+        ], acc: []
+      },
+      { name: 'TEST DAY', label: 'D', isTestDay: true,
+        main: [
+          { lift: 'squat', pct: null, reps: 1, sets: 3, note: 'Attempt' },
+          { lift: 'bench', pct: null, reps: 1, sets: 3, note: 'Attempt' },
+          { lift: 'deadlift', pct: null, reps: 1, sets: 3, note: 'Attempt' },
+        ], acc: []
+      },
+    ]
+  },
+];
+
+// ===================== HELPERS =====================
+function roundTo5(n) { return Math.round(n / 5) * 5; }
+function liftName(k) { return { squat: 'Squat', bench: 'Bench Press', deadlift: 'Deadlift' }[k]; }
+function fmtTime(secs) {
+  const m = Math.floor(secs / 60), s = secs % 60;
+  return m + ':' + String(s).padStart(2, '0');
+}
+function daysSince(dateStr) {
+  if (!dateStr) return null;
+  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+}
+
+function getBlockAndWeek(dayNum) {
+  // dayNum is 0-indexed total training day
+  let d = dayNum, block = 0;
+  for (let i = 0; i < BLOCKS.length; i++) {
+    const totalDays = BLOCKS[i].weeks * 4;
+    if (d < totalDays) { block = i; break; }
+    d -= totalDays;
+    if (i === BLOCKS.length - 1) { block = i; d = Math.min(d, totalDays - 1); }
+  }
+  const weekInBlock = Math.floor(d / 4);
+  const dayInWeek = d % 4;
+  let absWeek = 0;
+  for (let i = 0; i < block; i++) absWeek += BLOCKS[i].weeks;
+  absWeek += weekInBlock + 1;
+  return { block, weekInBlock, dayInWeek, absWeek };
+}
+
+function getMaxes(block) {
+  const prog = Store.get('program', {});
+  if (prog.blockMaxes && prog.blockMaxes[block]) return prog.blockMaxes[block];
+  const profile = Store.get('profile', {});
+  return { squat: profile.squat || 285, bench: profile.bench || 170, deadlift: profile.deadlift || 285 };
+}
+
+function calcWeight(lift, pct, block) {
+  if (!pct) return 0;
+  const maxes = getMaxes(block);
+  return roundTo5(maxes[lift] * pct);
+}
+
+function isAmrapDay(dayNum) {
+  // AMRAP on last Day A of each main block (weeks 4, 8, 12)
+  const { block, weekInBlock, dayInWeek } = getBlockAndWeek(dayNum);
+  if (block >= 3) return false; // no AMRAP in taper
+  return weekInBlock === BLOCKS[block].weeks - 1 && dayInWeek === 0;
+}
+
+function totalDays() {
+  return BLOCKS.reduce((sum, b) => sum + b.weeks * 4, 0);
+}
+
+// ===================== TIMER =====================
+const Timer = {
+  state: 'idle', // idle, working, resting
+  seconds: 0,
+  interval: null,
+  nudged: false,
+
+  start(mode) {
+    this.state = mode;
+    this.seconds = 0;
+    this.nudged = false;
+    this.updateUI();
+    if (this.interval) clearInterval(this.interval);
+    this.interval = setInterval(() => {
+      this.seconds++;
+      this.updateUI();
+      if (this.state === 'resting') {
+        const nudge = Store.get('profile', {}).nudge || 120;
+        if (this.seconds === nudge && !this.nudged) {
+          this.nudged = true;
+          try { navigator.vibrate([200, 100, 200, 100, 200]); } catch {}
+        }
+      }
+    }, 1000);
+  },
+
+  toggle() {
+    if (this.state === 'idle' || this.state === 'resting') {
+      this.start('working');
+    } else {
+      this.start('resting');
+    }
+  },
+
+  stop() {
+    this.state = 'idle';
+    if (this.interval) clearInterval(this.interval);
+    this.interval = null;
+    document.getElementById('timer-bar').style.display = 'none';
+  },
+
+  show() {
+    document.getElementById('timer-bar').style.display = 'block';
+  },
+
+  updateUI() {
+    const bar = document.getElementById('timer-bar');
+    const txt = document.getElementById('timer-text');
+    const nudge = Store.get('profile', {}).nudge || 120;
+    bar.className = '';
+    if (this.state === 'working') {
+      bar.classList.add('working');
+      txt.textContent = 'WORKING ' + fmtTime(this.seconds);
+    } else if (this.state === 'resting') {
+      if (this.seconds >= nudge) {
+        bar.classList.add('danger');
+        txt.textContent = 'REST ' + fmtTime(this.seconds) + ' — GET BACK TO IT';
+      } else if (this.seconds >= nudge - 30) {
+        bar.classList.add('warning');
+        txt.textContent = 'REST ' + fmtTime(this.seconds);
+      } else {
+        bar.classList.add('resting');
+        txt.textContent = 'REST ' + fmtTime(this.seconds);
+      }
+    }
+  }
+};
+
+// ===================== NAVIGATION =====================
+const Nav = {
+  current: 'home',
+  go(page) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('#nav button').forEach(b => b.classList.remove('active'));
+    document.getElementById('page-' + page).classList.add('active');
+    const navBtn = document.getElementById('nav-' + page);
+    if (navBtn) navBtn.classList.add('active');
+    this.current = page;
+    if (page === 'home') Home.render();
+    if (page === 'cardio') Cardio.render();
+    if (page === 'history') History.render();
+    if (page === 'settings') Settings.render();
+    if (page !== 'workout') Timer.stop();
+  }
+};
+
+// ===================== HOME PAGE =====================
+const Home = {
+  render() {
+    const prog = Store.get('program', null);
+    if (!prog) { Nav.go('setup'); return; }
+    const dayNum = prog.currentDay || 0;
+    const total = totalDays();
+    const { block, weekInBlock, dayInWeek, absWeek } = getBlockAndWeek(dayNum);
+    const blockDef = BLOCKS[block];
+    const dayDef = blockDef.days[dayInWeek];
+    const maxes = getMaxes(block);
+    const pct = Math.round((dayNum / total) * 100);
+    const workouts = Store.get('workouts', []);
+    const lastDate = workouts.length ? workouts[workouts.length - 1].date : null;
+    const daysAgo = daysSince(lastDate);
+    const completed = dayNum >= total;
+
+    let html = `<h1>PH3 Tracker</h1>`;
+
+    if (completed) {
+      html += `<div class="card text-center">
+        <div style="font-size:2rem;margin-bottom:8px">Program Complete!</div>
+        <p class="text-dim">You crushed 13 weeks. Rest, recover, and start again when you're ready.</p>
+        <button class="btn btn-primary mt-16" onclick="Settings.resetAll()">Start New Program</button>
+      </div>`;
+    } else {
+      // Check if block transition needed
+      if (block > 0 && !prog.blockMaxes[block] && block < 4) {
+        html += `<div class="card" style="border-left:4px solid var(--warning)">
+          <div class="card-title">Block Transition</div>
+          <p class="text-dim text-sm mb-8">Time to review your maxes before starting ${blockDef.name}.</p>
+          <button class="btn btn-primary btn-sm" onclick="Review.show(${block})">Review & Adjust Maxes</button>
+        </div>`;
+      }
+
+      html += `
+        <div class="card">
+          <div class="text-sm text-dim">Week ${absWeek} of 13</div>
+          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+          <div class="row" style="justify-content:space-between">
+            <span class="badge badge-blue">${blockDef.name}</span>
+            <span class="text-sm text-dim">${dayNum} / ${total} sessions</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="text-sm text-dim mb-8">NEXT WORKOUT</div>
+          <div style="font-size:1.2rem;font-weight:700;margin-bottom:12px">Day ${dayDef.label}: ${dayDef.name}</div>`;
+
+      if (isAmrapDay(dayNum)) {
+        html += `<div class="badge badge-amber mb-8">AMRAP TEST DAY</div>`;
+      }
+
+      if (dayDef.main.length > 0) {
+        dayDef.main.forEach(m => {
+          const w = m.pct ? calcWeight(m.lift, m.pct, block) : '—';
+          const label = m.note ? `${liftName(m.lift)} (${m.note})` : liftName(m.lift);
+          html += `<div class="row mb-8"><span style="flex:1">${label}</span><span style="font-weight:700">${w} lb</span><span class="text-dim" style="width:70px;text-align:right">${m.sets}×${m.reps}</span></div>`;
+        });
+      }
+      if (dayDef.acc.length > 0) {
+        html += `<div class="text-dim text-sm mt-8">+ ${dayDef.acc.length} accessories</div>`;
+      }
+
+      const canStart = !prog.blockMaxes || prog.blockMaxes[block] || block === 0;
+      html += `<button class="btn btn-success mt-16" ${canStart ? '' : 'disabled style="opacity:.4"'} onclick="Workout.start()">Start Workout</button>
+        </div>`;
+    }
+
+    // Current maxes
+    html += `<div class="card">
+      <div class="card-title">Working Maxes</div>
+      <div class="row mb-8"><span class="flex-1 text-dim">Squat</span><span style="font-weight:700">${maxes.squat} lb</span></div>
+      <div class="row mb-8"><span class="flex-1 text-dim">Bench</span><span style="font-weight:700">${maxes.bench} lb</span></div>
+      <div class="row"><span class="flex-1 text-dim">Deadlift</span><span style="font-weight:700">${maxes.deadlift} lb</span></div>
+    </div>`;
+
+    if (lastDate) {
+      html += `<div class="text-dim text-sm text-center">Last workout: ${daysAgo === 0 ? 'today' : daysAgo === 1 ? 'yesterday' : daysAgo + ' days ago'}</div>`;
+    }
+
+    document.getElementById('home-content').innerHTML = html;
+  }
+};
+
+// ===================== WORKOUT =====================
+const Workout = {
+  data: null, // { dayNum, exercises: [...], startTime }
+
+  start() {
+    const prog = Store.get('program', {});
+    const dayNum = prog.currentDay || 0;
+    const { block, weekInBlock, dayInWeek, absWeek } = getBlockAndWeek(dayNum);
+    const blockDef = BLOCKS[block];
+    const dayDef = blockDef.days[dayInWeek];
+    const amrap = isAmrapDay(dayNum);
+
+    const exercises = [];
+
+    // Main lifts
+    dayDef.main.forEach(m => {
+      const weight = m.pct ? calcWeight(m.lift, m.pct, block) : 0;
+      const sets = [];
+      for (let i = 0; i < m.sets; i++) {
+        const isLastSet = i === m.sets - 1;
+        sets.push({
+          goalWeight: weight,
+          goalReps: m.reps,
+          actualWeight: weight,
+          actualReps: m.reps,
+          isAmrap: amrap && isLastSet,
+          done: false,
+        });
+      }
+      exercises.push({
+        name: liftName(m.lift),
+        lift: m.lift,
+        isMain: true,
+        pct: m.pct,
+        note: m.note || null,
+        sets,
+        skipped: false,
+      });
+    });
+
+    // Accessories
+    dayDef.acc.forEach(a => {
+      const sets = [];
+      for (let i = 0; i < a.sets; i++) {
+        sets.push({
+          goalWeight: 0,
+          goalReps: a.reps,
+          actualWeight: 0,
+          actualReps: a.reps,
+          isAmrap: false,
+          done: false,
+        });
+      }
+      exercises.push({
+        name: a.name,
+        lift: null,
+        isMain: false,
+        rir: a.rir,
+        sets,
+        skipped: false,
+      });
+    });
+
+    this.data = {
+      dayNum,
+      block,
+      absWeek,
+      dayLabel: dayDef.label,
+      dayName: dayDef.name,
+      isTestDay: dayDef.isTestDay || false,
+      exercises,
+      startTime: Date.now(),
+    };
+
+    // Load previous accessory weights from history
+    this.loadPreviousWeights();
+
+    Store.set('activeWorkout', this.data);
+    Timer.show();
+    Timer.start('working');
+    Nav.current = 'workout';
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-workout').classList.add('active');
+    document.querySelectorAll('#nav button').forEach(b => b.classList.remove('active'));
+    this.render();
+  },
+
+  loadPreviousWeights() {
+    const workouts = Store.get('workouts', []);
+    if (!workouts.length) return;
+    // Find most recent workout with matching exercises
+    for (let i = workouts.length - 1; i >= 0; i--) {
+      const w = workouts[i];
+      if (!w.exercises) continue;
+      w.exercises.forEach(prevEx => {
+        this.data.exercises.forEach(curEx => {
+          if (curEx.name === prevEx.name && !curEx.isMain && prevEx.sets && prevEx.sets.length > 0) {
+            const lastWeight = prevEx.sets.find(s => s.actualWeight > 0);
+            if (lastWeight) {
+              curEx.sets.forEach(s => {
+                s.goalWeight = lastWeight.actualWeight;
+                s.actualWeight = lastWeight.actualWeight;
+              });
+            }
+          }
+        });
+      });
+    }
+  },
+
+  render() {
+    if (!this.data) return;
+    const d = this.data;
+    let html = `
+      <div style="padding:12px 16px;background:var(--surface);margin:0 -16px">
+        <div class="row" style="justify-content:space-between">
+          <button class="btn-xs btn-outline" onclick="Workout.confirmExit()">Exit</button>
+          <span class="text-sm">Wk ${d.absWeek} Day ${d.dayLabel}</span>
+        </div>
+        <div style="font-weight:700;margin-top:4px">${d.dayName}</div>
+      </div>
+      <div style="padding-top:12px">`;
+
+    d.exercises.forEach((ex, ei) => {
+      if (ex.skipped) return;
+      const allDone = ex.sets.every(s => s.done);
+      const headerClass = allDone ? 'background:var(--surface2)' : '';
+      html += `<div class="ex-card">
+        <div class="ex-header" style="${headerClass}">
+          <div>
+            <span class="name">${ex.name}</span>
+            ${ex.isMain && ex.pct ? `<span class="text-dim text-sm"> (${Math.round(ex.pct * 100)}%)</span>` : ''}
+            ${ex.rir != null ? `<span class="text-dim text-sm"> ${ex.rir} RIR</span>` : ''}
+            ${ex.note ? `<span class="text-dim text-sm"> — ${ex.note}</span>` : ''}
+          </div>
+          <div>
+            ${allDone ? '<span class="badge badge-green">Done</span>' : `<span class="text-dim text-sm">${ex.sets.filter(s => s.done).length}/${ex.sets.length}</span>`}
+            ${!ex.isMain ? `<button class="skip-btn" onclick="Workout.skipExercise(${ei})">skip</button>` : ''}
+          </div>
+        </div>
+        <div class="ex-body">`;
+
+      if (ex.isMain) {
+        html += `<div class="text-dim text-sm mb-8" style="font-style:italic">Warm up to working weight</div>`;
+      }
+
+      ex.sets.forEach((s, si) => {
+        const done = s.done;
+        html += `<div class="set-row">
+          <div class="set-label">
+            ${s.isAmrap ? `<span class="amrap-badge">AMRAP</span>` : `Set ${si + 1}`}
+          </div>
+          <div class="set-goal">${s.goalWeight > 0 ? s.goalWeight + ' × ' + s.goalReps : s.goalReps + ' reps'}</div>
+          <div class="set-actual">
+            <button class="adj" onclick="Workout.adjWeight(${ei},${si},-5)">-</button>
+            <input type="number" value="${s.actualWeight}" step="5"
+              onchange="Workout.setWeight(${ei},${si},this.value)"
+              ${done ? 'style="opacity:.6"' : ''}>
+            <span class="x">×</span>
+            <button class="adj" onclick="Workout.adjReps(${ei},${si},-1)">-</button>
+            <input type="number" value="${typeof s.actualReps === 'string' ? '' : s.actualReps}" step="1"
+              placeholder="${typeof s.goalReps === 'string' ? s.goalReps : ''}"
+              onchange="Workout.setReps(${ei},${si},this.value)"
+              ${done ? 'style="opacity:.6"' : ''}>
+            <button class="adj" onclick="Workout.adjReps(${ei},${si},1)">+</button>
+          </div>
+          <button class="set-check ${done ? (s.isAmrap ? 'amrap-done' : 'done') : ''}" onclick="Workout.toggleSet(${ei},${si})">
+            ${done ? '✓' : '○'}
+          </button>
+        </div>`;
+      });
+
+      html += `</div></div>`;
+    });
+
+    // Add custom exercise button
+    html += `<button class="btn btn-outline btn-sm mt-8 mb-16" onclick="Workout.addCustom()">+ Add Exercise</button>`;
+
+    // Finish button
+    const allMainDone = d.exercises.filter(e => e.isMain).every(e => e.sets.every(s => s.done) || e.skipped);
+    html += `<button class="btn ${allMainDone ? 'btn-success' : 'btn-outline'}" onclick="Workout.finish()" style="margin-bottom:24px">
+      ${allMainDone ? 'Finish Workout' : 'Finish Early'}
+    </button></div>`;
+
+    document.getElementById('workout-content').innerHTML = html;
+  },
+
+  adjWeight(ei, si, delta) {
+    this.data.exercises[ei].sets[si].actualWeight = Math.max(0, this.data.exercises[ei].sets[si].actualWeight + delta);
+    // Cascade to subsequent undone sets of same exercise
+    for (let i = si + 1; i < this.data.exercises[ei].sets.length; i++) {
+      if (!this.data.exercises[ei].sets[i].done) {
+        this.data.exercises[ei].sets[i].actualWeight = this.data.exercises[ei].sets[si].actualWeight;
+      }
+    }
+    Store.set('activeWorkout', this.data);
+    this.render();
+  },
+
+  adjReps(ei, si, delta) {
+    const s = this.data.exercises[ei].sets[si];
+    const cur = typeof s.actualReps === 'number' ? s.actualReps : 0;
+    s.actualReps = Math.max(0, cur + delta);
+    Store.set('activeWorkout', this.data);
+    this.render();
+  },
+
+  setWeight(ei, si, val) {
+    this.data.exercises[ei].sets[si].actualWeight = parseInt(val) || 0;
+    Store.set('activeWorkout', this.data);
+  },
+
+  setReps(ei, si, val) {
+    this.data.exercises[ei].sets[si].actualReps = parseInt(val) || val;
+    Store.set('activeWorkout', this.data);
+  },
+
+  toggleSet(ei, si) {
+    const s = this.data.exercises[ei].sets[si];
+    s.done = !s.done;
+    if (s.done) {
+      Timer.start('resting');
+    } else {
+      Timer.start('working');
+    }
+    Store.set('activeWorkout', this.data);
+    this.render();
+  },
+
+  skipExercise(ei) {
+    this.data.exercises[ei].skipped = true;
+    Store.set('activeWorkout', this.data);
+    this.render();
+  },
+
+  addCustom() {
+    const name = prompt('Exercise name:');
+    if (!name) return;
+    const setsCount = parseInt(prompt('How many sets?', '3')) || 3;
+    const reps = prompt('Target reps (e.g. "8-10" or "12"):', '10') || '10';
+    const sets = [];
+    for (let i = 0; i < setsCount; i++) {
+      sets.push({ goalWeight: 0, goalReps: reps, actualWeight: 0, actualReps: reps, isAmrap: false, done: false });
+    }
+    this.data.exercises.push({ name, lift: null, isMain: false, rir: null, sets, skipped: false });
+    Store.set('activeWorkout', this.data);
+    this.render();
+  },
+
+  confirmExit() {
+    if (confirm('Exit workout? Your progress on completed sets is saved.')) {
+      this.saveAndExit(false);
+    }
+  },
+
+  finish() {
+    this.saveAndExit(true);
+  },
+
+  saveAndExit(completed) {
+    const d = this.data;
+    const duration = Math.round((Date.now() - d.startTime) / 60000);
+
+    // Save workout record
+    const record = {
+      date: new Date().toISOString().split('T')[0],
+      dayNum: d.dayNum,
+      block: d.block,
+      absWeek: d.absWeek,
+      dayLabel: d.dayLabel,
+      dayName: d.dayName,
+      duration,
+      completed,
+      exercises: d.exercises.filter(e => !e.skipped).map(e => ({
+        name: e.name,
+        lift: e.lift,
+        isMain: e.isMain,
+        sets: e.sets.filter(s => s.done).map(s => ({
+          goalWeight: s.goalWeight,
+          goalReps: s.goalReps,
+          actualWeight: s.actualWeight,
+          actualReps: s.actualReps,
+          isAmrap: s.isAmrap,
+        }))
+      }))
+    };
+
+    const workouts = Store.get('workouts', []);
+    workouts.push(record);
+    Store.set('workouts', workouts);
+
+    // Advance program
+    const prog = Store.get('program', {});
+    prog.currentDay = (prog.currentDay || 0) + 1;
+    Store.set('program', prog);
+
+    // Clear active workout
+    Store.set('activeWorkout', null);
+    this.data = null;
+
+    Timer.stop();
+    Nav.go('home');
+  }
+};
+
+// ===================== BLOCK REVIEW =====================
+const Review = {
+  show(block) {
+    const prog = Store.get('program', {});
+    const prevBlock = block - 1;
+    const prevMaxes = getMaxes(prevBlock);
+
+    // Try to find AMRAP data from last workout of previous block
+    const workouts = Store.get('workouts', []);
+    const amrapData = { squat: null, bench: null, deadlift: null };
+
+    // Look for AMRAP sets in recent workouts
+    for (let i = workouts.length - 1; i >= Math.max(0, workouts.length - 8); i--) {
+      const w = workouts[i];
+      if (!w.exercises) continue;
+      w.exercises.forEach(ex => {
+        if (!ex.lift || !ex.isMain) return;
+        ex.sets.forEach(s => {
+          if (s.isAmrap && s.actualWeight > 0 && typeof s.actualReps === 'number' && s.actualReps > 0) {
+            if (!amrapData[ex.lift]) {
+              amrapData[ex.lift] = { weight: s.actualWeight, reps: s.actualReps };
+            }
+          }
+        });
+      });
+    }
+
+    const suggestions = {};
+    ['squat', 'bench', 'deadlift'].forEach(lift => {
+      const current = prevMaxes[lift];
+      const cap = lift === 'bench' ? 5 : 10;
+      if (amrapData[lift]) {
+        const { weight, reps } = amrapData[lift];
+        const epley = Math.round(weight * (1 + reps / 30));
+        const increase = Math.min(cap, Math.round((epley - current) * 0.5));
+        suggestions[lift] = roundTo5(current + Math.max(0, increase));
+      } else {
+        suggestions[lift] = current; // No data, keep same
+      }
+    });
+
+    let html = `
+      <h1>Block Complete!</h1>
+      <p class="text-dim mb-16">Review your estimated maxes before starting <strong>${BLOCKS[block].name}</strong>. Adjust each lift independently.</p>`;
+
+    ['squat', 'bench', 'deadlift'].forEach(lift => {
+      const current = prevMaxes[lift];
+      const suggested = suggestions[lift];
+      const ad = amrapData[lift];
+      html += `<div class="lift-review">
+        <div class="lift-name">${liftName(lift)}</div>
+        <div class="text-sm text-dim">Previous max: ${current} lb</div>
+        ${ad ? `<div class="text-sm text-dim">AMRAP: ${ad.weight} lb × ${ad.reps} reps</div>` : '<div class="text-sm text-dim">No AMRAP data (keeping current)</div>'}
+        <div class="row mt-8">
+          <label class="text-sm" style="width:80px">New max:</label>
+          <button class="adj" onclick="Review.adj('${lift}',-5)">-</button>
+          <input type="number" id="review-${lift}" value="${suggested}" step="5" style="width:80px;text-align:center">
+          <button class="adj" onclick="Review.adj('${lift}',5)">+</button>
+          <span class="text-sm text-dim">lb</span>
+        </div>
+        ${suggested > current ? `<div class="text-sm mt-8" style="color:var(--success)">+${suggested - current} lb from last block</div>` : ''}
+      </div>`;
+    });
+
+    html += `<button class="btn btn-success mt-16" onclick="Review.confirm(${block})">Confirm & Continue</button>
+      <button class="btn btn-outline mt-8" onclick="Nav.go('home')">Cancel</button>`;
+
+    document.getElementById('review-content').innerHTML = html;
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-review').classList.add('active');
+  },
+
+  adj(lift, delta) {
+    const input = document.getElementById('review-' + lift);
+    input.value = Math.max(0, parseInt(input.value) + delta);
+  },
+
+  confirm(block) {
+    const prog = Store.get('program', {});
+    if (!prog.blockMaxes) prog.blockMaxes = [null, null, null, null];
+    prog.blockMaxes[block] = {
+      squat: parseInt(document.getElementById('review-squat').value) || 0,
+      bench: parseInt(document.getElementById('review-bench').value) || 0,
+      deadlift: parseInt(document.getElementById('review-deadlift').value) || 0,
+    };
+    Store.set('program', prog);
+    Nav.go('home');
+  }
+};
+
+// ===================== CARDIO =====================
+const Cardio = {
+  add() {
+    const entry = {
+      date: new Date().toISOString().split('T')[0],
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      type: document.getElementById('cardio-type').value,
+      duration: parseInt(document.getElementById('cardio-dur').value) || 0,
+      distance: parseFloat(document.getElementById('cardio-dist').value) || 0,
+      hr: parseInt(document.getElementById('cardio-hr').value) || 0,
+      calories: parseInt(document.getElementById('cardio-cal').value) || 0,
+      notes: document.getElementById('cardio-notes').value,
+    };
+    if (!entry.duration && !entry.distance && !entry.notes) {
+      alert('Enter at least duration, distance, or notes.');
+      return;
+    }
+    const cardio = Store.get('cardio', []);
+    cardio.unshift(entry);
+    Store.set('cardio', cardio);
+    // Clear form
+    document.getElementById('cardio-dur').value = '';
+    document.getElementById('cardio-dist').value = '';
+    document.getElementById('cardio-hr').value = '';
+    document.getElementById('cardio-cal').value = '';
+    document.getElementById('cardio-notes').value = '';
+    this.render();
+  },
+
+  render() {
+    const cardio = Store.get('cardio', []);
+    const list = document.getElementById('cardio-list');
+    if (!cardio.length) {
+      list.innerHTML = '<div class="text-dim text-sm text-center" style="padding:16px">No cardio logged yet. Get moving!</div>';
+      return;
+    }
+    let html = '';
+    cardio.slice(0, 30).forEach((c, i) => {
+      html += `<div class="cardio-entry">
+        <div>
+          <div style="font-weight:600">${c.type}</div>
+          <div class="text-dim text-sm">${c.date}${c.time ? ' ' + c.time : ''}</div>
+          ${c.notes ? `<div class="text-sm mt-8">${c.notes}</div>` : ''}
+        </div>
+        <div style="text-align:right">
+          ${c.duration ? `<div>${c.duration} min</div>` : ''}
+          ${c.distance ? `<div class="text-sm text-dim">${c.distance} mi</div>` : ''}
+          ${c.hr ? `<div class="text-sm text-dim">${c.hr} bpm</div>` : ''}
+          ${c.calories ? `<div class="text-sm text-dim">${c.calories} cal</div>` : ''}
+        </div>
+      </div>`;
+    });
+    list.innerHTML = html;
+
+    // Weekly summary
+    const thisWeek = cardio.filter(c => daysSince(c.date) <= 7);
+    const totalMin = thisWeek.reduce((s, c) => s + (c.duration || 0), 0);
+    if (thisWeek.length > 0) {
+      const summary = document.createElement('div');
+      summary.className = 'text-sm text-center mt-8';
+      summary.style.color = 'var(--success)';
+      summary.textContent = `This week: ${thisWeek.length} sessions, ${totalMin} min total`;
+      list.parentNode.insertBefore(summary, list);
+    }
+  }
+};
+
+// ===================== HISTORY =====================
+const History = {
+  render() {
+    const workouts = Store.get('workouts', []);
+    const el = document.getElementById('history-content');
+    if (!workouts.length) {
+      el.innerHTML = '<div class="card text-center text-dim">No workouts yet. Start one from the Home tab!</div>';
+      return;
+    }
+    let html = '';
+    const reversed = [...workouts].reverse();
+    reversed.slice(0, 50).forEach(w => {
+      html += `<div class="card">
+        <div class="row" style="justify-content:space-between">
+          <span style="font-weight:700">Day ${w.dayLabel}: ${w.dayName}</span>
+          <span class="text-dim text-sm">${w.date}</span>
+        </div>
+        <div class="text-sm text-dim mb-8">Week ${w.absWeek} &middot; ${w.duration} min ${w.completed ? '' : '(partial)'}</div>`;
+
+      if (w.exercises) {
+        w.exercises.forEach(ex => {
+          if (!ex.sets || !ex.sets.length) return;
+          const setsStr = ex.sets.map(s => {
+            const w = s.actualWeight > 0 ? s.actualWeight + '×' : '';
+            return w + s.actualReps + (s.isAmrap ? ' AMRAP' : '');
+          }).join(', ');
+          html += `<div class="text-sm"><span style="color:var(--text)">${ex.name}:</span> <span class="text-dim">${setsStr}</span></div>`;
+        });
+      }
+      html += `</div>`;
+    });
+    el.innerHTML = html;
+  }
+};
+
+// ===================== SETTINGS =====================
+const Settings = {
+  render() {
+    const prog = Store.get('program', {});
+    const { block } = getBlockAndWeek(prog.currentDay || 0);
+    const maxes = getMaxes(block);
+    const profile = Store.get('profile', {});
+
+    document.getElementById('set-squat').value = maxes.squat;
+    document.getElementById('set-bench').value = maxes.bench;
+    document.getElementById('set-deadlift').value = maxes.deadlift;
+    document.getElementById('set-bw').value = profile.bodyweight || 230;
+    document.getElementById('set-nudge').value = profile.nudge || 120;
+  },
+
+  saveMaxes() {
+    const prog = Store.get('program', {});
+    const { block } = getBlockAndWeek(prog.currentDay || 0);
+    if (!prog.blockMaxes) prog.blockMaxes = [null, null, null, null];
+    prog.blockMaxes[block] = {
+      squat: parseInt(document.getElementById('set-squat').value) || 0,
+      bench: parseInt(document.getElementById('set-bench').value) || 0,
+      deadlift: parseInt(document.getElementById('set-deadlift').value) || 0,
+    };
+    Store.set('program', prog);
+    const profile = Store.get('profile', {});
+    profile.bodyweight = parseInt(document.getElementById('set-bw').value) || 230;
+    Store.set('profile', profile);
+    alert('Maxes updated!');
+  },
+
+  saveNudge() {
+    const profile = Store.get('profile', {});
+    profile.nudge = parseInt(document.getElementById('set-nudge').value) || 120;
+    Store.set('profile', profile);
+    alert('Timer updated!');
+  },
+
+  exportData() {
+    const data = Store.getAll();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ph3-backup-' + new Date().toISOString().split('T')[0] + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+
+  importData(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (data.profile) Store.set('profile', data.profile);
+        if (data.program) Store.set('program', data.program);
+        if (data.workouts) Store.set('workouts', data.workouts);
+        if (data.cardio) Store.set('cardio', data.cardio);
+        alert('Data imported!');
+        Nav.go('home');
+      } catch {
+        alert('Invalid file.');
+      }
+    };
+    reader.readAsText(file);
+  },
+
+  resetAll() {
+    if (confirm('This will delete ALL data and start fresh. Are you sure?')) {
+      localStorage.clear();
+      location.reload();
+    }
+  }
+};
+
+// ===================== APP =====================
+const App = {
+  init() {
+    // Check for active workout
+    const active = Store.get('activeWorkout', null);
+    if (active) {
+      Workout.data = active;
+      Timer.show();
+      Timer.start('resting');
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById('page-workout').classList.add('active');
+      Workout.render();
+      return;
+    }
+
+    // Check if setup needed
+    const profile = Store.get('profile', null);
+    if (!profile) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById('page-setup').classList.add('active');
+      return;
+    }
+
+    Nav.go('home');
+  },
+
+  finishSetup() {
+    const profile = {
+      squat: parseInt(document.getElementById('setup-squat').value) || 285,
+      bench: parseInt(document.getElementById('setup-bench').value) || 170,
+      deadlift: parseInt(document.getElementById('setup-deadlift').value) || 285,
+      bodyweight: parseInt(document.getElementById('setup-bw').value) || 230,
+      nudge: parseInt(document.getElementById('setup-nudge').value) || 120,
+    };
+    Store.set('profile', profile);
+
+    const program = {
+      currentDay: 0,
+      startDate: new Date().toISOString().split('T')[0],
+      blockMaxes: [
+        { squat: profile.squat, bench: profile.bench, deadlift: profile.deadlift },
+        null, null, null,
+      ]
+    };
+    Store.set('program', program);
+
+    Nav.go('home');
+  }
+};
+
+// ===================== SERVICE WORKER =====================
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+// ===================== INIT =====================
+App.init();
+</script>
+</body>
+</html>

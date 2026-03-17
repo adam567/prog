@@ -1,0 +1,17 @@
+{
+  "name": "PH3 Tracker",
+  "short_name": "PH3",
+  "description": "Progressive overload workout tracker",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "background_color": "#0f0f1a",
+  "theme_color": "#0f0f1a",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%230f0f1a' width='100' height='100' rx='20'/><text x='50' y='55' font-size='40' text-anchor='middle' dominant-baseline='middle' fill='%234361ee' font-family='sans-serif' font-weight='bold'>PH3</text></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
