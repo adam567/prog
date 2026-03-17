@@ -103,6 +103,18 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
 /* History */
 .hist-entry{padding:12px 0;border-bottom:1px solid var(--surface2)}
 .hist-entry:last-child{border:none}
+
+/* Exercise Picker Overlay */
+#ex-picker{display:none;position:fixed;inset:0;z-index:200;background:var(--bg);overflow-y:auto;padding:16px 16px 32px}
+#ex-picker.open{display:block}
+#ex-picker .cat{margin-bottom:16px}
+#ex-picker .cat-title{font-size:.8rem;color:var(--dim);text-transform:uppercase;letter-spacing:1px;padding:4px 0;border-bottom:1px solid var(--surface2);margin-bottom:6px}
+#ex-picker .ex-opt{display:flex;justify-content:space-between;align-items:center;padding:12px;margin-bottom:4px;background:var(--surface);border-radius:8px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+#ex-picker .ex-opt:active{background:var(--surface2)}
+#ex-picker .ex-opt .name{font-weight:600;font-size:.95rem}
+#ex-picker .ex-opt .meta{font-size:.75rem;color:var(--dim)}
+#ex-picker .custom-row{display:flex;gap:8px;margin-top:8px}
+#ex-picker .custom-row input{flex:1}
 </style>
 </head>
 <body>
@@ -201,6 +213,9 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
   </div>
   <p class="text-dim text-sm text-center mt-16">PH3 Tracker v1.0 &middot; Inspired by Layne Norton's PH3</p>
 </div>
+
+<!-- EXERCISE PICKER -->
+<div id="ex-picker"></div>
 
 <!-- BOTTOM NAV -->
 <nav id="nav">
@@ -872,16 +887,44 @@ const Workout = {
     this.render();
   },
 
-  addCustom() {
-    const name = prompt('Exercise name:');
-    if (!name) return;
-    const setsCount = parseInt(prompt('How many sets?', '3')) || 3;
-    const reps = prompt('Target reps (e.g. "8-10" or "12"):', '10') || '10';
+  addCustom() { ExPicker.open(); },
+
+  addFromCatalog(entry) {
     const sets = [];
-    for (let i = 0; i < setsCount; i++) {
-      sets.push({ goalWeight: 0, goalReps: reps, actualWeight: 0, actualReps: reps, isAmrap: false, done: false });
+    for (let i = 0; i < entry.sets; i++) {
+      sets.push({
+        goalWeight: entry.defaultWeight || 0,
+        goalReps: entry.reps,
+        actualWeight: entry.defaultWeight || 0,
+        actualReps: entry.reps,
+        isAmrap: false,
+        done: false,
+      });
     }
-    this.data.exercises.push({ name, lift: null, isMain: false, rir: null, sets, skipped: false });
+    const ex = {
+      name: entry.name,
+      lift: null,
+      isMain: false,
+      rir: entry.rir != null ? entry.rir : null,
+      inputType: entry.inputType || 'weight_reps',
+      sets,
+      skipped: false,
+    };
+    // Load previous weights for this exercise
+    const workouts = Store.get('workouts', []);
+    for (let i = workouts.length - 1; i >= 0; i--) {
+      const w = workouts[i];
+      if (!w.exercises) continue;
+      const prev = w.exercises.find(e => e.name === entry.name);
+      if (prev && prev.sets && prev.sets.length) {
+        const last = prev.sets.find(s => s.actualWeight > 0);
+        if (last) {
+          ex.sets.forEach(s => { s.goalWeight = last.actualWeight; s.actualWeight = last.actualWeight; });
+          break;
+        }
+      }
+    }
+    this.data.exercises.push(ex);
     Store.set('activeWorkout', this.data);
     this.render();
   },
@@ -1209,6 +1252,154 @@ const Settings = {
       location.reload();
     }
   }
+};
+
+// ===================== EXERCISE CATALOG =====================
+const CATALOG = [
+  { cat: 'Barbell', exercises: [
+    { name: 'Front Squat',              inputType: 'weight_reps', sets: 3, reps: 8,   rir: 3, defaultWeight: 0 },
+    { name: 'Pause Squat',              inputType: 'weight_reps', sets: 3, reps: 5,   rir: 2, defaultWeight: 0 },
+    { name: 'Overhead Press',           inputType: 'weight_reps', sets: 3, reps: 6,   rir: 3, defaultWeight: 0 },
+    { name: 'Barbell Row',              inputType: 'weight_reps', sets: 3, reps: 8,   rir: 2, defaultWeight: 0 },
+    { name: 'Romanian Deadlift',        inputType: 'weight_reps', sets: 3, reps: 8,   rir: 3, defaultWeight: 0 },
+    { name: 'Stiff-Leg Deadlift',       inputType: 'weight_reps', sets: 2, reps: 10,  rir: 3, defaultWeight: 0 },
+    { name: 'Close-Grip Bench',         inputType: 'weight_reps', sets: 3, reps: 8,   rir: 2, defaultWeight: 0 },
+    { name: 'Sumo Deadlift',            inputType: 'weight_reps', sets: 3, reps: 5,   rir: 2, defaultWeight: 0 },
+    { name: 'Barbell Curl',             inputType: 'weight_reps', sets: 3, reps: 10,  rir: 1, defaultWeight: 0 },
+    { name: 'Barbell Shrug',            inputType: 'weight_reps', sets: 3, reps: 12,  rir: 2, defaultWeight: 0 },
+    { name: 'Pause Bench',              inputType: 'weight_reps', sets: 3, reps: 5,   rir: 2, defaultWeight: 0 },
+    { name: 'Incline Barbell Press',    inputType: 'weight_reps', sets: 3, reps: 8,   rir: 3, defaultWeight: 0 },
+  ]},
+  { cat: 'Dumbbell', exercises: [
+    { name: 'DB Press (Flat)',          inputType: 'weight_reps', sets: 2, reps: 8,   rir: 3, defaultWeight: 0 },
+    { name: 'DB Press (Incline)',       inputType: 'weight_reps', sets: 2, reps: 8,   rir: 3, defaultWeight: 0 },
+    { name: 'DB Curl',                  inputType: 'weight_reps', sets: 3, reps: 10,  rir: 1, defaultWeight: 0 },
+    { name: 'Hammer Curl',             inputType: 'weight_reps', sets: 3, reps: 10,  rir: 1, defaultWeight: 0 },
+    { name: 'Concentration Curl',      inputType: 'weight_reps', sets: 3, reps: 12,  rir: 1, defaultWeight: 0 },
+    { name: 'DB Fly',                   inputType: 'weight_reps', sets: 2, reps: 12,  rir: 3, defaultWeight: 0 },
+    { name: 'DB Row',                   inputType: 'weight_reps', sets: 2, reps: 10,  rir: 2, defaultWeight: 0 },
+    { name: 'Lateral Raise',           inputType: 'weight_reps', sets: 2, reps: 15,  rir: 2, defaultWeight: 0 },
+    { name: 'DB Overhead Press',       inputType: 'weight_reps', sets: 2, reps: 8,   rir: 3, defaultWeight: 0 },
+    { name: 'DB Shrug',                inputType: 'weight_reps', sets: 3, reps: 12,  rir: 2, defaultWeight: 0 },
+    { name: 'DB Lunge',                inputType: 'weight_reps', sets: 2, reps: 10,  rir: 3, defaultWeight: 0 },
+    { name: 'Tricep Kickback',         inputType: 'weight_reps', sets: 3, reps: 12,  rir: 1, defaultWeight: 0 },
+    { name: 'DB Skullcrusher',         inputType: 'weight_reps', sets: 3, reps: 10,  rir: 1, defaultWeight: 0 },
+  ]},
+  { cat: 'Kettlebell', exercises: [
+    { name: 'KB Swing (25 lb)',         inputType: 'fixed_weight', sets: 3, reps: 20, rir: null, defaultWeight: 25 },
+    { name: 'KB Swing (49 lb)',         inputType: 'fixed_weight', sets: 3, reps: 15, rir: null, defaultWeight: 49 },
+    { name: 'KB Goblet Squat (25 lb)',  inputType: 'fixed_weight', sets: 3, reps: 12, rir: 3,    defaultWeight: 25 },
+    { name: 'KB Goblet Squat (49 lb)',  inputType: 'fixed_weight', sets: 3, reps: 10, rir: 3,    defaultWeight: 49 },
+    { name: 'KB Clean & Press (25 lb)', inputType: 'fixed_weight', sets: 3, reps: 8,  rir: 2,    defaultWeight: 25 },
+    { name: 'KB Clean & Press (49 lb)', inputType: 'fixed_weight', sets: 3, reps: 6,  rir: 2,    defaultWeight: 49 },
+    { name: 'KB Turkish Get-Up',        inputType: 'fixed_weight', sets: 2, reps: 3,  rir: 2,    defaultWeight: 25 },
+    { name: 'KB Row (25 lb)',           inputType: 'fixed_weight', sets: 3, reps: 12, rir: 2,    defaultWeight: 25 },
+    { name: 'KB Row (49 lb)',           inputType: 'fixed_weight', sets: 3, reps: 10, rir: 2,    defaultWeight: 49 },
+  ]},
+  { cat: 'Bodyweight', exercises: [
+    { name: 'Pullups',                  inputType: 'reps_only', sets: 3, reps: 'max', rir: 2, defaultWeight: 0 },
+    { name: 'Chin-ups',                 inputType: 'reps_only', sets: 3, reps: 'max', rir: 2, defaultWeight: 0 },
+    { name: 'Pushups',                  inputType: 'reps_only', sets: 3, reps: 'max', rir: 1, defaultWeight: 0 },
+    { name: 'Dips',                     inputType: 'reps_only', sets: 3, reps: 'max', rir: 2, defaultWeight: 0 },
+    { name: 'Box Jumps',                inputType: 'reps_only', sets: 3, reps: 5,     rir: null, defaultWeight: 0 },
+    { name: 'Burpees',                  inputType: 'reps_only', sets: 3, reps: 10,    rir: null, defaultWeight: 0 },
+    { name: 'Hanging Leg Raise',        inputType: 'reps_only', sets: 3, reps: 10,    rir: 2, defaultWeight: 0 },
+    { name: 'Bulgarian Split Squat',    inputType: 'weight_reps', sets: 2, reps: 10,  rir: 3, defaultWeight: 0 },
+    { name: 'Inverted Row',             inputType: 'reps_only', sets: 3, reps: 12,    rir: 2, defaultWeight: 0 },
+  ]},
+  { cat: 'Timed / Hold', exercises: [
+    { name: 'Plank',                    inputType: 'timed',     sets: 3, reps: '60s',  rir: null, defaultWeight: 0 },
+    { name: 'Dead Hang',                inputType: 'timed',     sets: 3, reps: 'max',  rir: null, defaultWeight: 0 },
+    { name: 'Farmer Walk',              inputType: 'timed',     sets: 3, reps: '40s',  rir: null, defaultWeight: 0 },
+    { name: 'Wall Sit',                 inputType: 'timed',     sets: 3, reps: '45s',  rir: null, defaultWeight: 0 },
+  ]},
+  { cat: 'Cable / Machine', exercises: [
+    { name: 'Lat Pulldown',             inputType: 'weight_reps', sets: 3, reps: 10,  rir: 2, defaultWeight: 0 },
+    { name: 'Cable Row',                inputType: 'weight_reps', sets: 3, reps: 10,  rir: 2, defaultWeight: 0 },
+    { name: 'Cable Fly',                inputType: 'weight_reps', sets: 2, reps: 12,  rir: 3, defaultWeight: 0 },
+    { name: 'Tricep Pushdown',          inputType: 'weight_reps', sets: 3, reps: 10,  rir: 1, defaultWeight: 0 },
+    { name: 'Face Pull',                inputType: 'weight_reps', sets: 3, reps: 15,  rir: 2, defaultWeight: 0 },
+    { name: 'Cable Curl',               inputType: 'weight_reps', sets: 3, reps: 12,  rir: 1, defaultWeight: 0 },
+    { name: 'Leg Press',                inputType: 'weight_reps', sets: 3, reps: 10,  rir: 3, defaultWeight: 0 },
+    { name: 'Leg Extension',            inputType: 'weight_reps', sets: 3, reps: 12,  rir: 3, defaultWeight: 0 },
+    { name: 'Leg Curl',                 inputType: 'weight_reps', sets: 3, reps: 12,  rir: 3, defaultWeight: 0 },
+    { name: 'Calf Raise (Machine)',      inputType: 'weight_reps', sets: 4, reps: 12,  rir: 1, defaultWeight: 0 },
+  ]},
+];
+
+// ===================== EXERCISE PICKER =====================
+const ExPicker = {
+  open() {
+    const el = document.getElementById('ex-picker');
+    let html = `
+      <div class="row" style="justify-content:space-between;margin-bottom:16px">
+        <h1 style="margin:0">Add Exercise</h1>
+        <button class="btn-xs btn-outline" onclick="ExPicker.close()">Cancel</button>
+      </div>`;
+
+    CATALOG.forEach(cat => {
+      html += `<div class="cat"><div class="cat-title">${cat.cat}</div>`;
+      cat.exercises.forEach((ex, i) => {
+        const meta = ExPicker.metaText(ex);
+        html += `<div class="ex-opt" onclick="ExPicker.pick('${cat.cat}',${i})">
+          <div>
+            <div class="name">${ex.name}</div>
+            <div class="meta">${meta}</div>
+          </div>
+          <div class="text-dim" style="font-size:1.2rem">+</div>
+        </div>`;
+      });
+      html += `</div>`;
+    });
+
+    // Custom free-text option at bottom
+    html += `<div class="cat"><div class="cat-title">Custom</div>
+      <div class="custom-row">
+        <input type="text" id="custom-ex-name" placeholder="Exercise name">
+        <button class="btn btn-primary btn-sm" onclick="ExPicker.addFreeText()">Add</button>
+      </div>
+      <div class="row gap-8 mt-8">
+        <div class="flex-1 input-group" style="margin:0"><label>Sets</label><input type="number" id="custom-ex-sets" value="3" step="1"></div>
+        <div class="flex-1 input-group" style="margin:0"><label>Reps</label><input type="text" id="custom-ex-reps" value="10" placeholder="10 or 8-10"></div>
+      </div>
+    </div>`;
+
+    el.innerHTML = html;
+    el.classList.add('open');
+  },
+
+  close() {
+    document.getElementById('ex-picker').classList.remove('open');
+  },
+
+  metaText(ex) {
+    const parts = [];
+    parts.push(ex.sets + (ex.sets === 1 ? ' set' : ' sets'));
+    parts.push(typeof ex.reps === 'number' ? ex.reps + ' reps' : ex.reps);
+    if (ex.rir != null) parts.push(ex.rir + ' RIR');
+    if (ex.inputType === 'fixed_weight') parts.push(ex.defaultWeight + ' lb');
+    if (ex.inputType === 'timed') parts[1] = ex.reps; // show "60s" or "max"
+    if (ex.inputType === 'reps_only') parts.unshift('BW');
+    return parts.join(' · ');
+  },
+
+  pick(catName, idx) {
+    const cat = CATALOG.find(c => c.cat === catName);
+    if (!cat) return;
+    const entry = cat.exercises[idx];
+    Workout.addFromCatalog(entry);
+    this.close();
+  },
+
+  addFreeText() {
+    const name = document.getElementById('custom-ex-name').value.trim();
+    if (!name) return;
+    const sets = parseInt(document.getElementById('custom-ex-sets').value) || 3;
+    const repsRaw = document.getElementById('custom-ex-reps').value.trim() || '10';
+    const reps = parseInt(repsRaw) || repsRaw;
+    Workout.addFromCatalog({ name, inputType: 'weight_reps', sets, reps, rir: null, defaultWeight: 0 });
+    this.close();
+  },
 };
 
 // ===================== APP =====================
