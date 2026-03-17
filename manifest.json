@@ -2,7 +2,7 @@
   "name": "PH3 Tracker",
   "short_name": "PH3",
   "description": "Progressive overload workout tracker",
-  "start_url": "/index.html",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0f0f1a",
   "theme_color": "#0f0f1a",
