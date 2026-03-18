@@ -82,6 +82,9 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
 .set-check{width:32px;height:32px;border-radius:8px;border:2px solid var(--surface3);background:transparent;color:var(--dim);font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .set-check.done{background:var(--success);border-color:var(--success);color:#000}
 .set-check.amrap-done{background:var(--warning);border-color:var(--warning);color:#000}
+.set-check.countdown{background:var(--warning);border-color:var(--warning);color:#000;font-size:.85rem;font-weight:700}
+.set-check.timing{background:var(--accent);border-color:var(--accent);color:#fff;font-size:.65rem;font-weight:700}
+.set-tut{font-size:.65rem;color:var(--dim);text-align:center;width:32px;flex-shrink:0}
 .amrap-badge{background:var(--warning);color:#000;padding:1px 6px;border-radius:4px;font-size:.65rem;font-weight:700;margin-left:4px}
 .skip-btn{font-size:.75rem;color:var(--dim);background:none;border:none;cursor:pointer;padding:4px 8px}
 
@@ -890,9 +893,16 @@ const Workout = {
               ${done ? 'style="opacity:.6"' : ''}>
             <button class="adj" onclick="Workout.adjReps(${ei},${si},1)">+</button>
           </div>
-          <button class="set-check ${done ? (s.isAmrap ? 'amrap-done' : 'done') : ''}" onclick="Workout.toggleSet(${ei},${si})">
-            ${done ? '✓' : '○'}
-          </button>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+            ${done
+              ? `<button class="set-check ${s.isAmrap ? 'amrap-done' : 'done'}" onclick="Workout.undoSet(${ei},${si})">✓</button>
+                 ${s.tut ? `<div class="set-tut">${s.tut}s</div>` : ''}`
+              : (Workout.activeSet && Workout.activeSet.ei === ei && Workout.activeSet.si === si)
+                ? `<button class="set-check timing" id="tut-btn" onclick="Workout.stopSet(${ei},${si})">■</button>
+                   <div class="set-tut" id="tut-live">0s</div>`
+                : `<button class="set-check" onclick="Workout.startSet(${ei},${si})">▶</button>`
+            }
+          </div>
         </div>`;
       });
 
@@ -943,16 +953,80 @@ const Workout = {
     Store.set('activeWorkout', this.data);
   },
 
-  toggleSet(ei, si) {
-    const s = this.data.exercises[ei].sets[si];
-    s.done = !s.done;
-    if (s.done) {
-      Timer.start('resting');
-    } else {
-      Timer.start('working');
+  activeSet: null,  // { ei, si, startTime, countdownInterval, tutInterval }
+
+  startSet(ei, si) {
+    // Clear any existing active set
+    this.clearActiveTimers();
+
+    const btn = document.querySelector('.set-check:not(.done):not(.amrap-done)');
+    this.activeSet = { ei, si, startTime: null, countdownInterval: null, tutInterval: null };
+
+    // 5-second countdown
+    let count = 5;
+    const checkBtn = event?.target || document.getElementById('tut-btn');
+
+    // Re-render to show countdown state, then start countdown
+    this.render();
+    const tutBtn = document.getElementById('tut-btn');
+    const tutLive = document.getElementById('tut-live');
+    if (tutBtn) {
+      tutBtn.className = 'set-check countdown';
+      tutBtn.textContent = count;
+      tutBtn.onclick = () => this.stopSet(ei, si);
     }
+    if (tutLive) tutLive.textContent = 'ready...';
+
+    Timer.start('working');
+
+    this.activeSet.countdownInterval = setInterval(() => {
+      count--;
+      const b = document.getElementById('tut-btn');
+      if (count > 0) {
+        if (b) b.textContent = count;
+      } else {
+        clearInterval(this.activeSet.countdownInterval);
+        this.activeSet.countdownInterval = null;
+        this.activeSet.startTime = Date.now();
+        if (b) { b.className = 'set-check timing'; b.textContent = '■'; }
+        // Start live TUT counter
+        this.activeSet.tutInterval = setInterval(() => {
+          const elapsed = Math.round((Date.now() - this.activeSet.startTime) / 1000);
+          const live = document.getElementById('tut-live');
+          if (live) live.textContent = elapsed + 's';
+        }, 250);
+        try { navigator.vibrate(100); } catch {}
+      }
+    }, 1000);
+  },
+
+  stopSet(ei, si) {
+    const s = this.data.exercises[ei].sets[si];
+    if (this.activeSet && this.activeSet.startTime) {
+      s.tut = Math.round((Date.now() - this.activeSet.startTime) / 1000);
+    }
+    s.done = true;
+    this.clearActiveTimers();
+    this.activeSet = null;
+    Timer.start('resting');
     Store.set('activeWorkout', this.data);
     this.render();
+  },
+
+  undoSet(ei, si) {
+    const s = this.data.exercises[ei].sets[si];
+    s.done = false;
+    s.tut = 0;
+    Timer.start('working');
+    Store.set('activeWorkout', this.data);
+    this.render();
+  },
+
+  clearActiveTimers() {
+    if (this.activeSet) {
+      if (this.activeSet.countdownInterval) clearInterval(this.activeSet.countdownInterval);
+      if (this.activeSet.tutInterval) clearInterval(this.activeSet.tutInterval);
+    }
   },
 
   setBand(ei, band) {
@@ -1063,6 +1137,7 @@ const Workout = {
           goalReps: s.goalReps,
           actualWeight: s.actualWeight,
           actualReps: s.actualReps,
+          tut: s.tut || 0,
           isAmrap: s.isAmrap,
         }))
       }))
