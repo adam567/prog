@@ -88,6 +88,11 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
 /* Adjust buttons */
 .adj{width:28px;height:28px;border-radius:6px;border:1px solid var(--surface3);background:var(--surface2);color:var(--text);font-size:.9rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .adj:active{background:var(--primary)}
+.band-row{display:flex;align-items:center;gap:6px;padding:6px 0 10px;border-bottom:1px solid var(--surface2);margin-bottom:4px}
+.band-btn{padding:4px 10px;border-radius:6px;border:1px solid var(--surface3);background:var(--surface2);color:var(--dim);font-size:.75rem;cursor:pointer}
+.band-btn.active{border-color:var(--primary);color:var(--text);background:var(--surface3)}
+.band-btn.green.active{border-color:#06d6a0;color:#06d6a0}
+.band-btn.black.active{border-color:#888;color:#ccc}
 
 /* Bottom nav */
 #nav{display:flex;background:var(--surface);border-top:1px solid var(--surface2);padding:6px 0 env(safe-area-inset-bottom)}
@@ -213,6 +218,7 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
       <button class="btn btn-outline btn-sm flex-1" onclick="document.getElementById('import-file').click()">Import JSON</button>
       <input type="file" id="import-file" accept=".json" style="display:none" onchange="Settings.importData(this)">
     </div>
+    <button class="btn btn-outline btn-sm mt-8" onclick="Settings.clearHistory()">Clear Workout History</button>
     <button class="btn btn-danger btn-sm mt-8" onclick="Settings.resetAll()">Reset Everything</button>
   </div>
   <p class="text-dim text-sm text-center mt-16">PH3 Tracker v1.0 &middot; Inspired by Layne Norton's PH3</p>
@@ -850,6 +856,20 @@ const Workout = {
         html += `<div class="text-dim text-sm mb-8" style="font-style:italic">Warm up to working weight</div>`;
       }
 
+      if (ex.name === 'Pullups') {
+        const bw = Store.get('profile', {}).bodyweight || 245;
+        const band = ex.band || 'none';
+        const assist = band === 'green' ? 40 : band === 'black' ? 65 : 0;
+        const effective = bw - assist;
+        html += `<div class="band-row">
+          <span class="text-dim text-sm">Band:</span>
+          <button class="band-btn ${band === 'none' ? 'active' : ''}" onclick="Workout.setBand(${ei},'none')">None</button>
+          <button class="band-btn green ${band === 'green' ? 'active' : ''}" onclick="Workout.setBand(${ei},'green')">Green</button>
+          <button class="band-btn black ${band === 'black' ? 'active' : ''}" onclick="Workout.setBand(${ei},'black')">Black</button>
+          <span class="text-dim text-sm" style="margin-left:auto">${effective} lb eff.</span>
+        </div>`;
+      }
+
       ex.sets.forEach((s, si) => {
         const done = s.done;
         html += `<div class="set-row">
@@ -931,6 +951,12 @@ const Workout = {
     } else {
       Timer.start('working');
     }
+    Store.set('activeWorkout', this.data);
+    this.render();
+  },
+
+  setBand(ei, band) {
+    this.data.exercises[ei].band = band;
     Store.set('activeWorkout', this.data);
     this.render();
   },
@@ -1026,10 +1052,12 @@ const Workout = {
       duration,
       completed,
       timer: timerSummary,
+      bodyweight: Store.get('profile', {}).bodyweight || 0,
       exercises: d.exercises.filter(e => !e.skipped).map(e => ({
         name: e.name,
         lift: e.lift,
         isMain: e.isMain,
+        band: e.band || null,
         sets: e.sets.filter(s => s.done).map(s => ({
           goalWeight: s.goalWeight,
           goalReps: s.goalReps,
@@ -1317,6 +1345,16 @@ const Settings = {
       }
     };
     reader.readAsText(file);
+  },
+
+  clearHistory() {
+    if (confirm('Clear all workout and cardio history? Your program progress and maxes will be kept.')) {
+      Store.set('workouts', []);
+      Store.set('cardio', []);
+      Store.set('activeWorkout', null);
+      alert('History cleared!');
+      Nav.go('home');
+    }
   },
 
   resetAll() {
