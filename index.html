@@ -973,7 +973,7 @@ const Workout = {
     if (tutBtn) {
       tutBtn.className = 'set-check countdown';
       tutBtn.textContent = count;
-      tutBtn.onclick = () => this.stopSet(ei, si);
+      tutBtn.onclick = () => this.cancelSet();
     }
     if (tutLive) tutLive.textContent = 'ready...';
 
@@ -1019,6 +1019,12 @@ const Workout = {
     s.tut = 0;
     Timer.start('working');
     Store.set('activeWorkout', this.data);
+    this.render();
+  },
+
+  cancelSet() {
+    this.clearActiveTimers();
+    this.activeSet = null;
     this.render();
   },
 
