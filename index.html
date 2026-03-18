@@ -876,6 +876,10 @@ const Workout = {
         </div>`;
       });
 
+      if (ex.isMain) {
+        html += `<button class="btn btn-outline btn-xs mt-8" style="width:auto;margin-left:auto;display:block" onclick="Workout.addSet(${ei})">+ Add Set</button>`;
+      }
+
       html += `</div></div>`;
     });
 
@@ -929,6 +933,21 @@ const Workout = {
     } else {
       Timer.start('working');
     }
+    Store.set('activeWorkout', this.data);
+    this.render();
+  },
+
+  addSet(ei) {
+    const ex = this.data.exercises[ei];
+    const last = ex.sets[ex.sets.length - 1];
+    ex.sets.push({
+      goalWeight: last.goalWeight,
+      goalReps: last.goalReps,
+      actualWeight: last.actualWeight,
+      actualReps: last.actualReps,
+      isAmrap: false,
+      done: false,
+    });
     Store.set('activeWorkout', this.data);
     this.render();
   },
