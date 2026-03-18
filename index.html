@@ -988,7 +988,7 @@ const Workout = {
         clearInterval(this.activeSet.countdownInterval);
         this.activeSet.countdownInterval = null;
         this.activeSet.startTime = Date.now();
-        if (b) { b.className = 'set-check timing'; b.textContent = '■'; }
+        if (b) { b.className = 'set-check timing'; b.textContent = '■'; b.onclick = () => Workout.stopSet(ei, si); }
         // Start live TUT counter
         this.activeSet.tutInterval = setInterval(() => {
           const elapsed = Math.round((Date.now() - this.activeSet.startTime) / 1000);
