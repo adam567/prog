@@ -133,9 +133,9 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
 <div id="app">
 
 <!-- TIMER BAR (visible during workouts) -->
-<div id="timer-bar" onclick="Timer.toggle()">
-  <span id="timer-text">RESTING 0:00</span>
-  <div class="sub" id="timer-sub">tap to toggle work / rest</div>
+<div id="timer-bar">
+  <span id="timer-text">READY</span>
+  <div class="sub" id="timer-sub">start a set to begin tracking</div>
 </div>
 
 <!-- SETUP PAGE -->
@@ -581,13 +581,20 @@ const Timer = {
     const sub = document.getElementById('timer-sub');
     const nudge = Store.get('profile', {}).nudge || 120;
     bar.className = '';
-    if (this.state === 'working') {
+    if (this.state === 'idle') {
+      bar.classList.add('resting');
+      txt.textContent = 'READY';
+      const summary = this.getSummary();
+      sub.textContent = summary.workPeriods > 0
+        ? `${summary.workPeriods} sets · avg rest: ${fmtTime(summary.avgRest)}`
+        : 'start a set to begin tracking';
+    } else if (this.state === 'working') {
       bar.classList.add('working');
       txt.textContent = 'WORKING ' + fmtTime(this.seconds);
       const summary = this.getSummary();
       sub.textContent = summary.restPeriods > 0
         ? `avg rest: ${fmtTime(summary.avgRest)} · ${summary.restOver} over ${fmtTime(nudge)}`
-        : 'tap to toggle work / rest';
+        : '';
     } else if (this.state === 'resting') {
       if (this.seconds >= nudge) {
         bar.classList.add('danger');
@@ -602,7 +609,7 @@ const Timer = {
       const summary = this.getSummary();
       sub.textContent = summary.restPeriods > 0
         ? `avg rest: ${fmtTime(summary.avgRest)} · longest: ${fmtTime(summary.maxRest)}`
-        : 'tap to toggle work / rest';
+        : '';
     }
   }
 };
@@ -789,7 +796,7 @@ const Workout = {
     Store.set('activeWorkout', this.data);
     Timer.reset();
     Timer.show();
-    Timer.start('working');
+    Timer.updateUI();
     Nav.current = 'workout';
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById('page-workout').classList.add('active');
@@ -876,8 +883,9 @@ const Workout = {
       ex.sets.forEach((s, si) => {
         const done = s.done;
         html += `<div class="set-row">
-          <div class="set-label">
-            ${s.isAmrap ? `<span class="amrap-badge">AMRAP</span>` : `Set ${si + 1}`}
+          <div class="set-label" style="display:flex;align-items:center;gap:2px">
+            ${ex.sets.length > 1 ? `<button style="font-size:.6rem;color:var(--dim);background:none;border:none;cursor:pointer;padding:0;line-height:1" onclick="Workout.deleteSet(${ei},${si})">✕</button>` : ''}
+            ${s.isAmrap ? `<span class="amrap-badge">AMRAP</span>` : `<span>S${si + 1}</span>`}
           </div>
           <div class="set-goal">${s.goalWeight > 0 ? s.goalWeight + ' × ' + s.goalReps : s.goalReps + ' reps'}</div>
           <div class="set-actual">
@@ -900,7 +908,8 @@ const Workout = {
               : (Workout.activeSet && Workout.activeSet.ei === ei && Workout.activeSet.si === si)
                 ? `<button class="set-check timing" id="tut-btn" onclick="Workout.stopSet(${ei},${si})">■</button>
                    <div class="set-tut" id="tut-live">0s</div>`
-                : `<button class="set-check" onclick="Workout.startSet(${ei},${si})">▶</button>`
+                : `<button class="set-check" onclick="Workout.startSet(${ei},${si})">▶</button>
+                   <button style="font-size:.6rem;color:var(--primary);background:none;border:none;cursor:pointer;padding:2px" onclick="event.stopPropagation();Workout.backfillSet(${ei},${si})">est.</button>`
             }
           </div>
         </div>`;
@@ -962,8 +971,8 @@ const Workout = {
     const btn = document.querySelector('.set-check:not(.done):not(.amrap-done)');
     this.activeSet = { ei, si, startTime: null, countdownInterval: null, tutInterval: null };
 
-    // 5-second countdown
-    let count = 5;
+    // 8-second countdown
+    let count = 8;
     const checkBtn = event?.target || document.getElementById('tut-btn');
 
     // Re-render to show countdown state, then start countdown
@@ -1017,7 +1026,6 @@ const Workout = {
     const s = this.data.exercises[ei].sets[si];
     s.done = false;
     s.tut = 0;
-    Timer.start('working');
     Store.set('activeWorkout', this.data);
     this.render();
   },
@@ -1033,6 +1041,46 @@ const Workout = {
       if (this.activeSet.countdownInterval) clearInterval(this.activeSet.countdownInterval);
       if (this.activeSet.tutInterval) clearInterval(this.activeSet.tutInterval);
     }
+  },
+
+  getAvgSecPerRep(exerciseName) {
+    const workouts = Store.get('workouts', []);
+    const samples = [];
+    for (let i = workouts.length - 1; i >= 0 && samples.length < 20; i--) {
+      const w = workouts[i];
+      if (!w.exercises) continue;
+      w.exercises.forEach(ex => {
+        if (ex.name !== exerciseName || samples.length >= 20) return;
+        ex.sets.forEach(s => {
+          if (samples.length >= 20) return;
+          if (s.tut > 0 && typeof s.actualReps === 'number' && s.actualReps > 0) {
+            samples.push(s.tut / s.actualReps);
+          }
+        });
+      });
+    }
+    if (!samples.length) return null;
+    return samples.reduce((a, b) => a + b, 0) / samples.length;
+  },
+
+  backfillSet(ei, si) {
+    const ex = this.data.exercises[ei];
+    const s = ex.sets[si];
+    const reps = typeof s.actualReps === 'number' ? s.actualReps : parseInt(s.actualReps) || 0;
+    if (!reps) {
+      alert('Enter reps first');
+      return;
+    }
+    const avgSecPerRep = this.getAvgSecPerRep(ex.name);
+    if (!avgSecPerRep) {
+      alert('No TUT history found for ' + ex.name);
+      return;
+    }
+    s.tut = Math.round(avgSecPerRep * reps);
+    s.done = true;
+    Timer.start('resting');
+    Store.set('activeWorkout', this.data);
+    this.render();
   },
 
   setBand(ei, band) {
@@ -1052,6 +1100,18 @@ const Workout = {
       isAmrap: false,
       done: false,
     });
+    Store.set('activeWorkout', this.data);
+    this.render();
+  },
+
+  deleteSet(ei, si) {
+    const ex = this.data.exercises[ei];
+    if (ex.sets.length <= 1) return;
+    if (this.activeSet && this.activeSet.ei === ei && this.activeSet.si === si) {
+      this.clearActiveTimers();
+      this.activeSet = null;
+    }
+    ex.sets.splice(si, 1);
     Store.set('activeWorkout', this.data);
     this.render();
   },
