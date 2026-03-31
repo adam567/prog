@@ -280,18 +280,18 @@ const BLOCKS = [
           { lift: 'deadlift', pct: 0.725, reps: 7, sets: 2 },
         ],
         acc: [
-          { name: 'Box Jumps', reps: '5', sets: 3, rir: null },
+          { name: 'Box Jumps', reps: '5', sets: 3, rir: null, defaultWeight: 0 },
         ]
       },
       { name: 'Upper Hypertrophy', label: 'B', main: [],
         acc: [
-          { name: 'DB Press (Flat/Incline)', reps: '6-8', sets: 2, rir: 3 },
-          { name: 'Pullups', reps: 'max', sets: 3, rir: 2 },
-          { name: 'Bent Row', reps: '8-10', sets: 2, rir: 2 },
-          { name: 'OHP / Military Press', reps: '5-7', sets: 2, rir: 3 },
-          { name: 'DB Curl', reps: '6-8', sets: 3, rir: 1 },
-          { name: 'Tricep Extension', reps: '6-8', sets: 3, rir: 1 },
-          { name: 'KB Swings (49 lb)', reps: '15-20', sets: 2, rir: null },
+          { name: 'DB Press (Flat/Incline)', reps: '6-8', sets: 2, rir: 3, defaultWeight: 55 },
+          { name: 'Pullups', reps: 'max', sets: 3, rir: 2, defaultWeight: 0 },
+          { name: 'Bent Row', reps: '8-10', sets: 2, rir: 2, defaultWeight: 135 },
+          { name: 'OHP / Military Press', reps: '5-7', sets: 2, rir: 3, defaultWeight: 95 },
+          { name: 'DB Curl', reps: '6-8', sets: 3, rir: 1, defaultWeight: 30 },
+          { name: 'Tricep Extension', reps: '6-8', sets: 3, rir: 1, defaultWeight: 25 },
+          { name: 'KB Swings (49 lb)', reps: '15-20', sets: 2, rir: null, defaultWeight: 49 },
         ]
       },
       { name: 'Squat / Bench / Legs', label: 'C',
@@ -300,8 +300,8 @@ const BLOCKS = [
           { lift: 'bench', pct: 0.775, reps: 7, sets: 3 },
         ],
         acc: [
-          { name: 'Stiff-Leg Deadlift', reps: '8-10', sets: 2, rir: 3 },
-          { name: 'Bulgarian Split Squat', reps: '8-10', sets: 2, rir: 3 },
+          { name: 'Stiff-Leg Deadlift', reps: '8-10', sets: 2, rir: 3, defaultWeight: 115 },
+          { name: 'Bulgarian Split Squat', reps: '8-10', sets: 2, rir: 3, defaultWeight: 115 },
         ]
       },
       { name: 'Deadlift / Bench / Upper', label: 'D',
@@ -310,10 +310,10 @@ const BLOCKS = [
           { lift: 'bench', pct: 0.825, reps: 5, sets: 3 },
         ],
         acc: [
-          { name: 'DB Fly', reps: '12-15', sets: 2, rir: 3 },
-          { name: 'Pullups', reps: 'max', sets: 2, rir: 2 },
-          { name: 'DB Row', reps: '10-12', sets: 2, rir: 2 },
-          { name: 'Lateral Raise', reps: '12-15', sets: 2, rir: 2 },
+          { name: 'DB Fly', reps: '12-15', sets: 2, rir: 3, defaultWeight: 30 },
+          { name: 'Pullups', reps: 'max', sets: 2, rir: 2, defaultWeight: 0 },
+          { name: 'DB Row', reps: '10-12', sets: 2, rir: 2, defaultWeight: 55 },
+          { name: 'Lateral Raise', reps: '12-15', sets: 2, rir: 2, defaultWeight: 20 },
         ]
       },
     ]
@@ -327,17 +327,17 @@ const BLOCKS = [
           { lift: 'bench', pct: 0.75, reps: 8, sets: 2 },
           { lift: 'deadlift', pct: 0.75, reps: 6, sets: 2 },
         ],
-        acc: [{ name: 'Box Jumps', reps: '5', sets: 3, rir: null }]
+        acc: [{ name: 'Box Jumps', reps: '5', sets: 3, rir: null, defaultWeight: 0 }]
       },
       { name: 'Upper Hypertrophy', label: 'B', main: [],
         acc: [
-          { name: 'DB Press (Flat/Incline)', reps: '8-10', sets: 2, rir: 3 },
-          { name: 'Pullups', reps: 'max', sets: 3, rir: 2 },
-          { name: 'Bent Row', reps: '8-10', sets: 2, rir: 2 },
-          { name: 'OHP / Military Press', reps: '6-8', sets: 2, rir: 3 },
-          { name: 'DB Curl', reps: '8-10', sets: 3, rir: 1 },
-          { name: 'Tricep Extension', reps: '8-10', sets: 3, rir: 1 },
-          { name: 'KB Swings (49 lb)', reps: '15-20', sets: 2, rir: null },
+          { name: 'DB Press (Flat/Incline)', reps: '8-10', sets: 2, rir: 3, defaultWeight: 55 },
+          { name: 'Pullups', reps: 'max', sets: 3, rir: 2, defaultWeight: 0 },
+          { name: 'Bent Row', reps: '8-10', sets: 2, rir: 2, defaultWeight: 135 },
+          { name: 'OHP / Military Press', reps: '6-8', sets: 2, rir: 3, defaultWeight: 95 },
+          { name: 'DB Curl', reps: '8-10', sets: 3, rir: 1, defaultWeight: 30 },
+          { name: 'Tricep Extension', reps: '8-10', sets: 3, rir: 1, defaultWeight: 25 },
+          { name: 'KB Swings (49 lb)', reps: '15-20', sets: 2, rir: null, defaultWeight: 49 },
         ]
       },
       { name: 'Squat / Bench / Legs', label: 'C',
@@ -346,8 +346,8 @@ const BLOCKS = [
           { lift: 'bench', pct: 0.80, reps: 6, sets: 3 },
         ],
         acc: [
-          { name: 'Stiff-Leg Deadlift', reps: '8-10', sets: 2, rir: 3 },
-          { name: 'Front Squat', reps: '8-10', sets: 2, rir: 3 },
+          { name: 'Stiff-Leg Deadlift', reps: '8-10', sets: 2, rir: 3, defaultWeight: 115 },
+          { name: 'Front Squat', reps: '8-10', sets: 2, rir: 3, defaultWeight: 135 },
         ]
       },
       { name: 'Deadlift / Bench / Upper', label: 'D',
@@ -356,10 +356,10 @@ const BLOCKS = [
           { lift: 'bench', pct: 0.85, reps: 4, sets: 4 },
         ],
         acc: [
-          { name: 'DB Fly', reps: '12-15', sets: 2, rir: 3 },
-          { name: 'Pullups', reps: 'max', sets: 2, rir: 2 },
-          { name: 'DB Row', reps: '10-12', sets: 2, rir: 2 },
-          { name: 'Lateral Raise', reps: '12-15', sets: 2, rir: 2 },
+          { name: 'DB Fly', reps: '12-15', sets: 2, rir: 3, defaultWeight: 30 },
+          { name: 'Pullups', reps: 'max', sets: 2, rir: 2, defaultWeight: 0 },
+          { name: 'DB Row', reps: '10-12', sets: 2, rir: 2, defaultWeight: 55 },
+          { name: 'Lateral Raise', reps: '12-15', sets: 2, rir: 2, defaultWeight: 20 },
         ]
       },
     ]
@@ -377,12 +377,12 @@ const BLOCKS = [
       },
       { name: 'Upper Hypertrophy', label: 'B', main: [],
         acc: [
-          { name: 'DB Press (Flat/Incline)', reps: '6-8', sets: 2, rir: 3 },
-          { name: 'Pullups', reps: 'max', sets: 3, rir: 2 },
-          { name: 'Bent Row', reps: '6-8', sets: 3, rir: 2 },
-          { name: 'OHP / Military Press', reps: '5-7', sets: 2, rir: 3 },
-          { name: 'DB Curl', reps: '6-8', sets: 3, rir: 1 },
-          { name: 'Tricep Extension', reps: '6-8', sets: 3, rir: 1 },
+          { name: 'DB Press (Flat/Incline)', reps: '6-8', sets: 2, rir: 3, defaultWeight: 55 },
+          { name: 'Pullups', reps: 'max', sets: 3, rir: 2, defaultWeight: 0 },
+          { name: 'Bent Row', reps: '6-8', sets: 3, rir: 2, defaultWeight: 135 },
+          { name: 'OHP / Military Press', reps: '5-7', sets: 2, rir: 3, defaultWeight: 95 },
+          { name: 'DB Curl', reps: '6-8', sets: 3, rir: 1, defaultWeight: 30 },
+          { name: 'Tricep Extension', reps: '6-8', sets: 3, rir: 1, defaultWeight: 25 },
         ]
       },
       { name: 'Squat / Bench / Legs', label: 'C',
@@ -391,8 +391,8 @@ const BLOCKS = [
           { lift: 'bench', pct: 0.825, reps: 5, sets: 4 },
         ],
         acc: [
-          { name: 'Stiff-Leg Deadlift', reps: '8-10', sets: 2, rir: 3 },
-          { name: 'Front Squat', reps: '6-8', sets: 2, rir: 3 },
+          { name: 'Stiff-Leg Deadlift', reps: '8-10', sets: 2, rir: 3, defaultWeight: 115 },
+          { name: 'Front Squat', reps: '6-8', sets: 2, rir: 3, defaultWeight: 135 },
         ]
       },
       { name: 'Deadlift / Bench / Upper', label: 'D',
@@ -401,8 +401,8 @@ const BLOCKS = [
           { lift: 'bench', pct: 0.875, reps: 3, sets: 4 },
         ],
         acc: [
-          { name: 'DB Fly', reps: '12-15', sets: 2, rir: 3 },
-          { name: 'Pullups', reps: 'max', sets: 2, rir: 2 },
+          { name: 'DB Fly', reps: '12-15', sets: 2, rir: 3, defaultWeight: 30 },
+          { name: 'Pullups', reps: 'max', sets: 2, rir: 2, defaultWeight: 0 },
         ]
       },
     ]
@@ -419,9 +419,9 @@ const BLOCKS = [
       },
       { name: 'Light Recovery', label: 'B', main: [],
         acc: [
-          { name: 'Light DB Press', reps: '12-15', sets: 2, rir: 4 },
-          { name: 'Light Rows', reps: '12-15', sets: 2, rir: 4 },
-          { name: 'Light Curls', reps: '12-15', sets: 2, rir: 4 },
+          { name: 'Light DB Press', reps: '12-15', sets: 2, rir: 4, defaultWeight: 30 },
+          { name: 'Light Rows', reps: '12-15', sets: 2, rir: 4, defaultWeight: 95 },
+          { name: 'Light Curls', reps: '12-15', sets: 2, rir: 4, defaultWeight: 20 },
         ]
       },
       { name: 'Speed Work', label: 'C',
@@ -581,20 +581,20 @@ const Timer = {
     const sub = document.getElementById('timer-sub');
     const nudge = Store.get('profile', {}).nudge || 120;
     bar.className = '';
+    const summary = this.getSummary();
+    // Include current period's live seconds in the running totals
+    const liveWork = summary.totalWork + (this.state === 'working' ? this.seconds : 0);
+    const liveRest = summary.totalRest + (this.state === 'resting' ? this.seconds : 0);
+    const accumText = (liveWork || liveRest) ? `work ${fmtTime(liveWork)} · rest ${fmtTime(liveRest)}` : '';
+
     if (this.state === 'idle') {
       bar.classList.add('resting');
       txt.textContent = 'READY';
-      const summary = this.getSummary();
-      sub.textContent = summary.workPeriods > 0
-        ? `${summary.workPeriods} sets · avg rest: ${fmtTime(summary.avgRest)}`
-        : 'start a set to begin tracking';
+      sub.textContent = accumText || 'start a set to begin tracking';
     } else if (this.state === 'working') {
       bar.classList.add('working');
       txt.textContent = 'WORKING ' + fmtTime(this.seconds);
-      const summary = this.getSummary();
-      sub.textContent = summary.restPeriods > 0
-        ? `avg rest: ${fmtTime(summary.avgRest)} · ${summary.restOver} over ${fmtTime(nudge)}`
-        : '';
+      sub.textContent = accumText;
     } else if (this.state === 'resting') {
       if (this.seconds >= nudge) {
         bar.classList.add('danger');
@@ -606,10 +606,7 @@ const Timer = {
         bar.classList.add('resting');
         txt.textContent = 'REST ' + fmtTime(this.seconds);
       }
-      const summary = this.getSummary();
-      sub.textContent = summary.restPeriods > 0
-        ? `avg rest: ${fmtTime(summary.avgRest)} · longest: ${fmtTime(summary.maxRest)}`
-        : '';
+      sub.textContent = accumText;
     }
   }
 };
@@ -696,8 +693,22 @@ const Home = {
       }
 
       const canStart = !prog.blockMaxes || prog.blockMaxes[block] || block === 0;
-      html += `<button class="btn btn-success mt-16" ${canStart ? '' : 'disabled style="opacity:.4"'} onclick="Workout.start()">Start Workout</button>
-        </div>`;
+      html += `<button class="btn btn-success mt-16" ${canStart ? '' : 'disabled style="opacity:.4"'} onclick="Workout.start()">Start Workout</button>`;
+
+      // Swap / defer button
+      if (canStart && dayNum < total - 1) {
+        if (prog.deferredDay != null) {
+          const defInfo = getBlockAndWeek(prog.deferredDay);
+          const defDay = BLOCKS[defInfo.block].days[defInfo.dayInWeek];
+          html += `<div class="text-sm text-dim text-center mt-8">Deferred: Day ${defDay.label} (${defDay.name}) — up next after this one</div>`;
+        } else {
+          const nextInfo = getBlockAndWeek(dayNum + 1);
+          const nextDay = BLOCKS[nextInfo.block].days[nextInfo.dayInWeek];
+          html += `<button class="btn btn-outline btn-sm mt-8" onclick="Home.swapNext()">Swap → do Day ${nextDay.label} (${nextDay.name}) first</button>`;
+        }
+      }
+
+      html += `</div>`;
     }
 
     // Current maxes
@@ -713,6 +724,15 @@ const Home = {
     }
 
     document.getElementById('home-content').innerHTML = html;
+  },
+
+  swapNext() {
+    const prog = Store.get('program', {});
+    const dayNum = prog.currentDay || 0;
+    prog.deferredDay = dayNum;
+    prog.currentDay = dayNum + 1;
+    Store.set('program', prog);
+    this.render();
   }
 };
 
@@ -758,12 +778,13 @@ const Workout = {
 
     // Accessories
     dayDef.acc.forEach(a => {
+      const w = a.defaultWeight || 0;
       const sets = [];
       for (let i = 0; i < a.sets; i++) {
         sets.push({
-          goalWeight: 0,
+          goalWeight: w,
           goalReps: a.reps,
-          actualWeight: 0,
+          actualWeight: w,
           actualReps: a.reps,
           isAmrap: false,
           done: false,
@@ -986,8 +1007,6 @@ const Workout = {
     }
     if (tutLive) tutLive.textContent = 'ready...';
 
-    Timer.start('working');
-
     this.activeSet.countdownInterval = setInterval(() => {
       count--;
       const b = document.getElementById('tut-btn');
@@ -997,6 +1016,7 @@ const Workout = {
         clearInterval(this.activeSet.countdownInterval);
         this.activeSet.countdownInterval = null;
         this.activeSet.startTime = Date.now();
+        Timer.start('working');
         if (b) { b.className = 'set-check timing'; b.textContent = '■'; b.onclick = () => Workout.stopSet(ei, si); }
         // Start live TUT counter
         this.activeSet.tutInterval = setInterval(() => {
@@ -1215,7 +1235,13 @@ const Workout = {
 
     // Advance program
     const prog = Store.get('program', {});
-    prog.currentDay = (prog.currentDay || 0) + 1;
+    if (prog.deferredDay != null) {
+      // We just finished the swapped-in workout; go back to the deferred one
+      prog.currentDay = prog.deferredDay;
+      delete prog.deferredDay;
+    } else {
+      prog.currentDay = (prog.currentDay || 0) + 1;
+    }
     Store.set('program', prog);
 
     // Clear active workout
