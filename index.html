@@ -34,7 +34,7 @@ h2{font-size:1.1rem;color:var(--dim);margin-bottom:8px;text-transform:uppercase;
 .btn-outline{background:transparent;border:2px solid var(--surface3);color:var(--text)}
 .btn-sm{padding:8px 16px;font-size:.85rem;width:auto}
 .btn-xs{padding:4px 10px;font-size:.75rem;width:auto;border-radius:8px}
-input[type=number],input[type=text],select{background:var(--surface2);border:2px solid var(--surface3);color:var(--text);padding:10px 14px;border-radius:8px;font-size:1.1rem;width:100%;-moz-appearance:textfield}
+input[type=number],input[type=text],input[type=password],input[type=date],select{background:var(--surface2);border:2px solid var(--surface3);color:var(--text);padding:10px 14px;border-radius:8px;font-size:1.1rem;width:100%;-moz-appearance:textfield}
 input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 input:focus,select:focus{outline:none;border-color:var(--primary)}
 .input-group{margin-bottom:12px}
@@ -107,6 +107,26 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
 .cardio-entry{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--surface2)}
 .cardio-entry:last-child{border:none}
 
+.cardio-entry .actions{display:flex;gap:6px;margin-top:6px;justify-content:flex-end}
+.chip{display:inline-block;padding:1px 6px;border-radius:5px;font-size:.65rem;font-weight:700;margin-left:4px;vertical-align:middle}
+.chip-z2{background:rgba(6,214,160,.18);color:var(--success)}
+.chip-hard{background:rgba(247,37,133,.2);color:var(--accent)}
+.chip-strava{background:rgba(252,82,0,.18);color:#fc5200}
+.chip-warn{background:rgba(239,71,111,.18);color:var(--danger)}
+.goal-row{display:flex;justify-content:space-between;align-items:baseline;margin-top:6px}
+.goal-row .big{font-size:1.3rem;font-weight:800}
+.dots span{display:inline-block;width:14px;height:14px;border-radius:50%;border:2px solid var(--accent);margin-left:4px}
+.dots span.on{background:var(--accent)}
+.dots.lift span{border-color:var(--primary)}.dots.lift span.on{background:var(--primary)}
+.wk-table{width:100%;font-size:.8rem;border-collapse:collapse;margin-top:10px}
+.wk-table td{padding:4px 2px;border-top:1px solid var(--surface2)}
+.wk-table td:not(:first-child){text-align:right}
+.hide{display:none!important}
+#sync-dot{position:fixed;top:8px;right:8px;width:9px;height:9px;border-radius:50%;background:var(--dim);z-index:300;opacity:.85}
+#sync-dot.ok{background:var(--success)}#sync-dot.pending{background:var(--warning)}#sync-dot.err{background:var(--danger)}
+.check-row{display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:.9rem}
+.check-row input{width:20px;height:20px}
+
 /* Block review */
 .lift-review{background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:10px}
 .lift-review .lift-name{font-weight:700;margin-bottom:6px}
@@ -130,6 +150,7 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
 </style>
 </head>
 <body>
+<div id="sync-dot" title="sync status" onclick="Nav.go('settings')"></div>
 <div id="app">
 
 <!-- TIMER BAR (visible during workouts) -->
@@ -141,12 +162,19 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
 <!-- SETUP PAGE -->
 <div id="page-setup" class="page">
   <div class="brand-header"><div class="brand-logo">PH3</div><div><h1>PH3 Tracker</h1><div class="brand-sub">Setup</div></div></div>
-  <p class="text-dim mb-16">Enter your current estimated 1-rep maxes to generate your 13-week program.</p>
+  <p class="text-dim mb-16">Enter maxes you could hit <strong>today</strong>, not your all-time bests. Coming off a layoff, err low: the program builds from there.</p>
   <div class="input-group"><label>Squat 1RM (lb)</label><input type="number" id="setup-squat" value="285" step="5"></div>
   <div class="input-group"><label>Bench Press 1RM (lb)</label><input type="number" id="setup-bench" value="170" step="5"></div>
   <div class="input-group"><label>Deadlift 1RM (lb)</label><input type="number" id="setup-deadlift" value="285" step="5"></div>
   <div class="input-group"><label>Bodyweight (lb)</label><input type="number" id="setup-bw" value="230" step="1"></div>
   <div class="input-group"><label>Rest Timer Nudge (seconds)</label><input type="number" id="setup-nudge" value="120" step="15"></div>
+  <div class="input-group"><label>Ease-in after a layoff</label>
+    <select id="setup-ramp">
+      <option value="0">None: full program loads from day 1</option>
+      <option value="2">2 weeks: 70% then 85% of program loads</option>
+      <option value="3" selected>3 weeks: 70%, 80%, 90% of program loads</option>
+    </select>
+  </div>
   <button class="btn btn-primary mt-16" onclick="App.finishSetup()">Start Program</button>
 </div>
 
@@ -168,24 +196,37 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
 <!-- CARDIO PAGE -->
 <div id="page-cardio" class="page">
   <div class="brand-header"><div class="brand-logo">PH3</div><div><h1>Cardio Log</h1><div class="brand-sub">Track your conditioning</div></div></div>
-  <div class="card">
-    <div class="input-group"><label>Type</label>
-      <select id="cardio-type">
-        <option>Walk</option><option>Run</option><option>Run (Strava)</option>
-        <option>Run (HR Monitor)</option><option>Hill Sprints</option>
-        <option>Treadmill Sprints</option><option>Other</option>
-      </select>
+  <div id="cardio-week"></div>
+  <div class="card" id="cardio-strava"></div>
+  <div class="card" id="cardio-form-card">
+    <div class="card-title" id="cardio-form-title">Log a session</div>
+    <div class="row gap-8">
+      <div class="flex-1 input-group"><label>Type</label>
+        <select id="cardio-type" onchange="Cardio.onType()"></select>
+      </div>
+      <div class="input-group" style="width:150px"><label>Date</label><input type="date" id="cardio-date"></div>
     </div>
     <div class="row gap-8">
       <div class="flex-1 input-group"><label>Duration (min)</label><input type="number" id="cardio-dur" step="1"></div>
-      <div class="flex-1 input-group"><label>Distance (mi)</label><input type="number" id="cardio-dist" step="0.1"></div>
+      <div class="flex-1 input-group"><label id="cardio-hr-label">Avg HR</label><input type="number" id="cardio-hr" step="1"></div>
+    </div>
+    <div class="row gap-8 f-tread">
+      <div class="flex-1 input-group"><label>Speed (mph)</label><input type="number" id="cardio-speed" step="0.1"></div>
+      <div class="flex-1 input-group"><label>Incline (%)</label><input type="number" id="cardio-incline" step="0.5"></div>
+    </div>
+    <div class="row gap-8 f-int">
+      <div class="flex-1 input-group"><label>Rounds</label><input type="number" id="cardio-rounds" step="1"></div>
+      <div class="flex-1 input-group"><label>Work (sec)</label><input type="number" id="cardio-work" step="5"></div>
+      <div class="flex-1 input-group"><label>Rest (sec)</label><input type="number" id="cardio-rest" step="5"></div>
     </div>
     <div class="row gap-8">
-      <div class="flex-1 input-group"><label>Avg HR (optional)</label><input type="number" id="cardio-hr" step="1"></div>
-      <div class="flex-1 input-group"><label>Calories (optional)</label><input type="number" id="cardio-cal" step="1"></div>
+      <div class="flex-1 input-group"><label>Distance (mi)</label><input type="number" id="cardio-dist" step="0.1"></div>
+      <div class="flex-1 input-group"><label>Max HR</label><input type="number" id="cardio-maxhr" step="1"></div>
     </div>
     <div class="input-group"><label>Notes</label><input type="text" id="cardio-notes" placeholder="How'd it feel?"></div>
-    <button class="btn btn-success" onclick="Cardio.add()">Log Cardio</button>
+    <label class="check-row"><input type="checkbox" id="cardio-hard"> Counts as a hard session (sprints, incline, hard rope / KB)</label>
+    <button class="btn btn-success" id="cardio-save" onclick="Cardio.save()">Log Session</button>
+    <button class="btn btn-outline mt-8 hide" id="cardio-cancel" onclick="Cardio.resetForm()">Cancel edit</button>
   </div>
   <h2 class="mt-16">Recent</h2>
   <div id="cardio-list" class="card"></div>
@@ -211,8 +252,34 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
   </div>
   <div class="card mt-16">
     <div class="card-title">Rest Timer</div>
+    <p class="text-dim text-sm mb-8">Buzzes at this point, then every 30 seconds until you start the next set.</p>
     <div class="input-group"><label>Nudge after (seconds)</label><input type="number" id="set-nudge" step="15"></div>
     <button class="btn btn-outline btn-sm" onclick="Settings.saveNudge()">Update</button>
+  </div>
+  <div class="card mt-16">
+    <div class="card-title">Weekly Goals</div>
+    <div class="row gap-8">
+      <div class="flex-1 input-group"><label>Max HR</label><input type="number" id="set-maxhr" step="1"></div>
+      <div class="flex-1 input-group"><label>Zone 2 low</label><input type="number" id="set-z2low" step="1"></div>
+      <div class="flex-1 input-group"><label>Zone 2 high</label><input type="number" id="set-z2high" step="1"></div>
+    </div>
+    <div class="row gap-8">
+      <div class="flex-1 input-group"><label>Zone 2 min / week</label><input type="number" id="set-z2goal" step="10"></div>
+      <div class="flex-1 input-group"><label>Hard sessions / week</label><input type="number" id="set-hardgoal" step="1"></div>
+      <div class="flex-1 input-group"><label>Lifts / week</label><input type="number" id="set-liftgoal" step="1"></div>
+    </div>
+    <button class="btn btn-outline btn-sm" onclick="Settings.saveCardio()">Update</button>
+    <button class="btn btn-outline btn-sm" onclick="Settings.z2FromMax()">Set Zone 2 to 60–70% of max</button>
+  </div>
+  <div class="card mt-16">
+    <div class="card-title">Cloud Sync</div>
+    <p class="text-sm mb-8" id="sync-status"></p>
+    <button class="btn btn-outline btn-sm" onclick="Sync.syncNow(true)">Sync now</button>
+  </div>
+  <div class="card mt-16">
+    <div class="card-title">Strava</div>
+    <p class="text-sm mb-8" id="strava-status">Checking…</p>
+    <div class="row gap-8" id="strava-buttons"></div>
   </div>
   <div class="card mt-16">
     <div class="card-title">Data</div>
@@ -221,10 +288,11 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
       <button class="btn btn-outline btn-sm flex-1" onclick="document.getElementById('import-file').click()">Import JSON</button>
       <input type="file" id="import-file" accept=".json" style="display:none" onchange="Settings.importData(this)">
     </div>
+    <button class="btn btn-outline btn-sm mt-8" onclick="Settings.newProgram()">Restart Program (keep history)</button>
     <button class="btn btn-outline btn-sm mt-8" onclick="Settings.clearHistory()">Clear Workout History</button>
     <button class="btn btn-danger btn-sm mt-8" onclick="Settings.resetAll()">Reset Everything</button>
   </div>
-  <p class="text-dim text-sm text-center mt-16">PH3 Tracker v1.0 &middot; Inspired by Layne Norton's PH3</p>
+  <p class="text-dim text-sm text-center mt-16">PH3 Tracker v2.0 &middot; Inspired by Layne Norton's PH3</p>
 </div>
 
 <!-- EXERCISE PICKER -->
@@ -253,20 +321,119 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
 </div>
 
 <script>
+// The old GitHub Pages copy forwards to the real (synced) app.
+if (location.hostname.endsWith('github.io')) location.replace('https://ph3.azurewebsites.net/');
+
 // ===================== STORAGE =====================
+// localStorage is the working copy (so the app works offline in the gym);
+// every change is pushed to the server, which is the copy that lasts.
+const SYNC_KEYS = ['profile', 'program', 'workouts', 'cardio', 'activeWorkout', 'stravaGym'];
 const Store = {
-  get(k, def) { try { const v = localStorage.getItem('ph3_' + k); return v ? JSON.parse(v) : def; } catch { return def; } },
-  set(k, v) { localStorage.setItem('ph3_' + k, JSON.stringify(v)); },
+  get(k, def) {
+    try { const v = localStorage.getItem('ph3_' + k); if (!v) return def; const p = JSON.parse(v); return p ?? def; }
+    catch { return def; }
+  },
+  set(k, v) {
+    localStorage.setItem('ph3_' + k, JSON.stringify(v));
+    if (SYNC_KEYS.includes(k)) Sync.mark(k);
+  },
   getAll() {
     return {
       profile: Store.get('profile', null),
       program: Store.get('program', null),
       workouts: Store.get('workouts', []),
       cardio: Store.get('cardio', []),
+      stravaGym: Store.get('stravaGym', []),
       activeWorkout: Store.get('activeWorkout', null),
     };
   }
 };
+
+// ===================== SYNC =====================
+const Sync = {
+  timer: null, busy: false, state: 'none', lastOk: null, lastErr: '',
+  meta() { try { return JSON.parse(localStorage.getItem('ph3__sync')) || {}; } catch { return {}; } },
+  saveMeta(m) { localStorage.setItem('ph3__sync', JSON.stringify(m)); },
+  mark(k) {
+    const m = this.meta();
+    m[k] = { updated: Date.now(), dirty: true };
+    this.saveMeta(m);
+    this.setState('pending');
+    this.schedule(1500);
+  },
+  pending() { return Object.values(this.meta()).filter(x => x.dirty).length; },
+  schedule(ms) { clearTimeout(this.timer); this.timer = setTimeout(() => this.syncNow(), ms); },
+  setState(s, err) {
+    this.state = s; if (err !== undefined) this.lastErr = err;
+    const dot = document.getElementById('sync-dot');
+    if (dot) dot.className = { ok: 'ok', pending: 'pending', err: 'err' }[s] || '';
+    const el = document.getElementById('sync-status');
+    if (el) el.innerHTML = this.describe();
+  },
+  describe() {
+    const p = this.pending();
+    if (this.state === 'err') return `<span style="color:var(--danger)">${this.lastErr || 'Sync failed'}</span>${p ? ` · ${p} change(s) waiting` : ''}`;
+    if (p) return `<span style="color:var(--warning)">${p} change(s) waiting to sync</span>`;
+    return `<span style="color:var(--success)">All saved to server</span>${this.lastOk ? ' · ' + new Date(this.lastOk).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''}`;
+  },
+  async api(method, path, body) {
+    const r = await fetch(path, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    return r;
+  },
+  async push() {
+    let serverNewer = false;
+    const m = this.meta();
+    for (const k of Object.keys(m)) {
+      if (!m[k].dirty) continue;
+      const r = await this.api('PUT', '/api/data/' + k, { value: Store.get(k, null), updated: m[k].updated });
+      if (!r.ok && r.status !== 409) throw new Error('Server error ' + r.status);
+      if (r.status === 409) serverNewer = true;
+      const now = this.meta();
+      if (now[k] && now[k].updated === m[k].updated) { now[k].dirty = false; this.saveMeta(now); }
+    }
+    return serverNewer;
+  },
+  // Take any server document newer than the local copy. Returns true if anything changed.
+  async pull() {
+    const r = await this.api('GET', '/api/data');
+    if (!r.ok) throw new Error('Server error ' + r.status);
+    const data = await r.json();
+    const m = this.meta();
+    let changed = false;
+    for (const [k, d] of Object.entries(data)) {
+      if (!SYNC_KEYS.includes(k)) continue;
+      if (!m[k] || d.updated > m[k].updated) {
+        localStorage.setItem('ph3_' + k, JSON.stringify(d.value));
+        m[k] = { updated: d.updated, dirty: false };
+        changed = true;
+      }
+    }
+    this.saveMeta(m);
+    return changed;
+  },
+  async syncNow(manual) {
+    if (this.busy) { this.schedule(1000); return false; }
+    this.busy = true;
+    let changed = false;
+    try {
+      await this.push();
+      changed = await this.pull();
+      this.lastOk = Date.now();
+      this.setState(this.pending() ? 'pending' : 'ok', '');
+      if (changed && Nav.current !== 'workout') App.refresh();
+    } catch (e) {
+      this.setState('err', navigator.onLine ? e.message : 'Offline: changes will sync when you have signal');
+      this.schedule(30000);
+    } finally { this.busy = false; }
+    return changed;
+  },
+};
+window.addEventListener('online', () => Sync.syncNow());
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') Sync.syncNow(); });
 
 // ===================== PROGRAM DEFINITION =====================
 const BLOCKS = [
@@ -442,6 +609,19 @@ const BLOCKS = [
   },
 ];
 
+// Kettlebell work (49 lb unless noted) added to each training block, not the taper.
+// A: swing finisher for conditioning. B: carry for grip/trunk. C: goblet squat
+// volume. D: clean & press for shoulders and hips.
+const KB_ADDONS = {
+  A: [{ name: 'KB Swing (49 lb), EMOM', reps: '10', sets: 5, rir: null }],
+  B: [{ name: 'KB Suitcase Carry (49 lb)', reps: '40 yd/side', sets: 3, rir: null }],
+  C: [{ name: 'KB Goblet Squat (49 lb)', reps: '10', sets: 2, rir: 3 }],
+  D: [{ name: 'KB Clean & Press (49 lb)', reps: '5/side', sets: 3, rir: 2 }],
+};
+BLOCKS.slice(0, 3).forEach(b => b.days.forEach(d => {
+  (KB_ADDONS[d.label] || []).forEach(a => { if (!d.acc.some(x => x.name.startsWith(a.name.split(' (')[0]))) d.acc.push(a); });
+}));
+
 // ===================== HELPERS =====================
 function roundTo5(n) { return Math.round(n / 5) * 5; }
 function liftName(k) { return { squat: 'Squat', bench: 'Bench Press', deadlift: 'Deadlift' }[k]; }
@@ -449,9 +629,33 @@ function fmtTime(secs) {
   const m = Math.floor(secs / 60), s = secs % 60;
   return m + ':' + String(s).padStart(2, '0');
 }
+// Local calendar date (YYYY-MM-DD). toISOString() is UTC and would log an
+// evening session under tomorrow's date.
+function localDate(d = new Date()) {
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+function parseLocal(dateStr) { return new Date(dateStr + 'T00:00:00'); }
 function daysSince(dateStr) {
   if (!dateStr) return null;
-  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+  return Math.round((parseLocal(localDate()) - parseLocal(dateStr.slice(0, 10))) / 86400000);
+}
+// Monday of the week containing dateStr
+function weekStart(dateStr) {
+  const d = parseLocal(dateStr);
+  d.setDate(d.getDate() - (d.getDay() + 6) % 7);
+  return localDate(d);
+}
+function addDays(dateStr, n) { const d = parseLocal(dateStr); d.setDate(d.getDate() + n); return localDate(d); }
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
+
+// Ease-in after a layoff: main-lift loads scaled down for the first weeks.
+function rampFactor(absWeek, dayNum) {
+  const prog = Store.get('program', {}) || {};
+  const r = prog.ramp || 0;
+  let f = (!r || absWeek > r) ? 1 : 0.7 + (0.3 / r) * (absWeek - 1);
+  // "Ease loads" comeback choice: the next few sessions at a lighter load.
+  if (prog.easeUntil != null && dayNum != null && dayNum < prog.easeUntil) f = Math.min(f, prog.easeFactor || 0.85);
+  return f;
 }
 
 function getBlockAndWeek(dayNum) {
@@ -478,10 +682,10 @@ function getMaxes(block) {
   return { squat: profile.squat || 285, bench: profile.bench || 170, deadlift: profile.deadlift || 285 };
 }
 
-function calcWeight(lift, pct, block) {
+function calcWeight(lift, pct, block, absWeek, dayNum) {
   if (!pct) return 0;
   const maxes = getMaxes(block);
-  return roundTo5(maxes[lift] * pct);
+  return roundTo5(maxes[lift] * pct * rampFactor(absWeek || 99, dayNum));
 }
 
 function isAmrapDay(dayNum) {
@@ -515,22 +719,33 @@ const Timer = {
     }
     this.state = mode;
     this.seconds = 0;
-    this.nudged = false;
+    this.lastNudge = -1;
     this.periodStart = Date.now();
     this.updateUI();
     if (this.interval) clearInterval(this.interval);
     this.interval = setInterval(() => {
-      this.seconds++;
+      // Wall-clock based: if the phone sleeps, the rest still counts.
+      this.seconds = Math.floor((Date.now() - this.periodStart) / 1000);
       this.updateUI();
       if (this.state === 'resting') {
         const nudge = Store.get('profile', {}).nudge || 120;
-        if (this.seconds === nudge && !this.nudged) {
-          this.nudged = true;
-          try { navigator.vibrate([200, 100, 200, 100, 200]); } catch {}
+        if (this.seconds >= nudge) {
+          // Buzz at the limit, then every 30 s until the next set starts.
+          const n = Math.floor((this.seconds - nudge) / 30);
+          if (n !== this.lastNudge) {
+            this.lastNudge = n;
+            try { navigator.vibrate(n === 0 ? [200, 100, 200, 100, 200] : [400, 150, 400, 150, 400, 150, 400]); } catch {}
+          }
         }
       }
     }, 1000);
   },
+
+  wakeLock: null,
+  async keepAwake() {
+    try { if ('wakeLock' in navigator && !this.wakeLock) { this.wakeLock = await navigator.wakeLock.request('screen'); this.wakeLock.addEventListener('release', () => { this.wakeLock = null; }); } } catch {}
+  },
+  releaseAwake() { try { if (this.wakeLock) this.wakeLock.release(); } catch {} this.wakeLock = null; },
 
   toggle() {
     if (this.state === 'idle' || this.state === 'resting') {
@@ -551,6 +766,7 @@ const Timer = {
     this.state = 'idle';
     if (this.interval) clearInterval(this.interval);
     this.interval = null;
+    this.releaseAwake();
     document.getElementById('timer-bar').style.display = 'none';
   },
 
@@ -561,6 +777,7 @@ const Timer = {
 
   show() {
     document.getElementById('timer-bar').style.display = 'block';
+    this.keepAwake();
   },
 
   // Get summary stats
@@ -572,7 +789,8 @@ const Timer = {
     const avgRest = rest.length ? Math.round(totalRest / rest.length) : 0;
     const maxRest = rest.length ? Math.max(...rest.map(p => p.duration)) : 0;
     const restOver = rest.filter(p => p.duration > (Store.get('profile', {}).nudge || 120)).length;
-    return { totalWork, totalRest, avgRest, maxRest, restPeriods: rest.length, workPeriods: work.length, restOver };
+    const onTimePct = rest.length ? Math.round(100 * (rest.length - restOver) / rest.length) : null;
+    return { totalWork, totalRest, avgRest, maxRest, restPeriods: rest.length, workPeriods: work.length, restOver, onTimePct, limit: Store.get('profile', {}).nudge || 120 };
   },
 
   updateUI() {
@@ -617,6 +835,7 @@ const Nav = {
     const navBtn = document.getElementById('nav-' + page);
     if (navBtn) navBtn.classList.add('active');
     this.current = page;
+    if (page === 'setup') App.fillSetup();
     if (page === 'home') Home.render();
     if (page === 'cardio') Cardio.render();
     if (page === 'history') History.render();
@@ -648,7 +867,7 @@ const Home = {
       html += `<div class="card text-center">
         <div style="font-size:2rem;margin-bottom:8px">Program Complete!</div>
         <p class="text-dim">You crushed 13 weeks. Rest, recover, and start again when you're ready.</p>
-        <button class="btn btn-primary mt-16" onclick="Settings.resetAll()">Start New Program</button>
+        <button class="btn btn-primary mt-16" onclick="Settings.newProgram()">Start New Program</button>
       </div>`;
     } else {
       // Check if block transition needed
@@ -663,7 +882,7 @@ const Home = {
       html += `
         <div class="card">
           <div class="text-sm text-dim">Week ${absWeek} of 13</div>
-          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+            <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
           <div class="row" style="justify-content:space-between">
             <span class="badge badge-blue">${blockDef.name}</span>
             <span class="text-sm text-dim">${dayNum} / ${total} sessions</span>
@@ -671,7 +890,8 @@ const Home = {
         </div>
         <div class="card">
           <div class="text-sm text-dim mb-8">NEXT WORKOUT</div>
-          <div style="font-size:1.2rem;font-weight:700;margin-bottom:12px">Day ${dayDef.label}: ${dayDef.name}</div>`;
+          <div style="font-size:1.2rem;font-weight:700;margin-bottom:12px">Day ${dayDef.label}: ${dayDef.name}</div>
+          ${rampFactor(absWeek, dayNum) < 1 ? `<div class="badge badge-green mb-8">${absWeek <= (prog.ramp || 0) ? `Ease-in week ${absWeek} of ${prog.ramp}` : 'Easing back in'}: main lifts at ${Math.round(rampFactor(absWeek, dayNum) * 100)}%</div>` : ''}`;
 
       if (isAmrapDay(dayNum)) {
         html += `<div class="badge badge-amber mb-8">AMRAP TEST DAY</div>`;
@@ -679,7 +899,7 @@ const Home = {
 
       if (dayDef.main.length > 0) {
         dayDef.main.forEach(m => {
-          const w = m.pct ? calcWeight(m.lift, m.pct, block) : '—';
+          const w = m.pct ? calcWeight(m.lift, m.pct, block, absWeek, dayNum) : '—';
           const label = m.note ? `${liftName(m.lift)} (${m.note})` : liftName(m.lift);
           html += `<div class="row mb-8"><span style="flex:1">${label}</span><span style="font-weight:700">${w} lb</span><span class="text-dim" style="width:70px;text-align:right">${m.sets}×${m.reps}</span></div>`;
         });
@@ -700,6 +920,24 @@ const Home = {
       <div class="row mb-8"><span class="flex-1 text-dim">Bench</span><span style="font-weight:700">${maxes.bench} lb</span></div>
       <div class="row"><span class="flex-1 text-dim">Deadlift</span><span style="font-weight:700">${maxes.deadlift} lb</span></div>
     </div>`;
+
+    // The week at a glance
+    html += `<div class="card" onclick="Nav.go('cardio')" style="cursor:pointer">
+      <div class="card-title">This week</div>
+      ${Cardio.weekCard(true)}
+    </div>`;
+
+    // Rest discipline from recent workouts
+    const scored = workouts.filter(w => w.timer && w.timer.restPeriods).slice(-6);
+    if (scored.length) {
+      const last = scored[scored.length - 1].timer;
+      const pctOf = t => t.onTimePct ?? Math.round(100 * (t.restPeriods - t.restOver) / t.restPeriods);
+      html += `<div class="card">
+        <div class="card-title">Rest discipline</div>
+        <div class="text-sm">Last workout: <strong>${last.restPeriods - last.restOver} of ${last.restPeriods}</strong> rests on time (${pctOf(last)}%) · avg ${fmtTime(last.avgRest)} · longest ${fmtTime(last.maxRest)}</div>
+        ${scored.length > 1 ? `<div class="text-sm text-dim mt-8">Recent: ${scored.map(w => pctOf(w.timer) + '%').join(' → ')}</div>` : ''}
+      </div>`;
+    }
 
     if (lastDate) {
       html += `<div class="text-dim text-sm text-center">Last workout: ${daysAgo === 0 ? 'today' : daysAgo === 1 ? 'yesterday' : daysAgo + ' days ago'}</div>`;
@@ -725,7 +963,7 @@ const Workout = {
 
     // Main lifts
     dayDef.main.forEach(m => {
-      const weight = m.pct ? calcWeight(m.lift, m.pct, block) : 0;
+      const weight = m.pct ? calcWeight(m.lift, m.pct, block, absWeek, dayNum) : 0;
       const sets = [];
       for (let i = 0; i < m.sets; i++) {
         const isLastSet = i === m.sets - 1;
@@ -830,7 +1068,7 @@ const Workout = {
             <div class="brand-logo" style="width:28px;height:28px;font-size:.6rem;border-radius:7px">PH3</div>
             <button class="btn-xs btn-outline" onclick="Workout.confirmExit()">Exit</button>
           </div>
-          <span class="text-sm">Wk ${d.absWeek} Day ${d.dayLabel}</span>
+          <span class="text-sm">Wk ${d.absWeek} Day ${d.dayLabel}${rampFactor(d.absWeek, d.dayNum) < 1 ? ` · easing ${Math.round(rampFactor(d.absWeek, d.dayNum) * 100)}%` : ''}</span>
         </div>
         <div style="font-weight:700;margin-top:4px">${d.dayName}</div>
       </div>
@@ -1123,7 +1361,9 @@ const Workout = {
 
     // Save workout record
     const record = {
-      date: new Date().toISOString().split('T')[0],
+      date: localDate(),
+      startedAt: d.startTime,
+      endedAt: Date.now(),
       dayNum: d.dayNum,
       block: d.block,
       absWeek: d.absWeek,
@@ -1164,6 +1404,10 @@ const Workout = {
 
     Timer.stop();
     Nav.go('home');
+    if (timerSummary.restPeriods) {
+      const t = timerSummary;
+      alert(`Rest discipline: ${t.restPeriods - t.restOver} of ${t.restPeriods} rests under ${fmtTime(t.limit)} (${t.onTimePct}%).\nAverage ${fmtTime(t.avgRest)}, longest ${fmtTime(t.maxRest)}.`);
+    }
   }
 };
 
@@ -1258,70 +1502,424 @@ const Review = {
 };
 
 // ===================== CARDIO =====================
+const CARDIO_TYPES = {
+  'z2-tread': { label: 'Zone 2 · Treadmill', z2: true, tread: true },
+  'z2-other': { label: 'Zone 2 · Outdoor / other', z2: true },
+  'sprint':   { label: 'Sprints', hard: true, tread: true, intervals: true },
+  'incline':  { label: 'Incline intervals', hard: true, tread: true, intervals: true },
+  'run':      { label: 'Run' },
+  'walk':     { label: 'Walk / Hike' },
+  'bike':     { label: 'Bike' },
+  'rope':     { label: 'Jump rope' },
+  'kb':       { label: 'Kettlebell conditioning' },
+  'other':    { label: 'Other' },
+};
+const STRAVA_GYM = ['WeightTraining', 'Workout', 'Crossfit'];
+
 const Cardio = {
-  add() {
-    const entry = {
-      date: new Date().toISOString().split('T')[0],
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      type: document.getElementById('cardio-type').value,
-      duration: parseInt(document.getElementById('cardio-dur').value) || 0,
-      distance: parseFloat(document.getElementById('cardio-dist').value) || 0,
-      hr: parseInt(document.getElementById('cardio-hr').value) || 0,
-      calories: parseInt(document.getElementById('cardio-cal').value) || 0,
-      notes: document.getElementById('cardio-notes').value,
-    };
-    if (!entry.duration && !entry.distance && !entry.notes) {
-      alert('Enter at least duration, distance, or notes.');
-      return;
+  editing: null,
+
+  // Weekly targets; a week can have its own plan (chosen from the picker).
+  prefs(ws) {
+    const profile = Store.get('profile', {}) || {};
+    const c = profile.cardio || {};
+    const plan = ws && (profile.weekPlans || {})[ws];
+    const base = { maxHr: c.maxHr || 185, z2Low: c.z2Low || 111, z2High: c.z2High || 130, z2Goal: c.z2Goal || 120, hardGoal: c.hardGoal || 2, liftGoal: c.liftGoal || 3 };
+    return plan ? { ...base, z2Goal: plan.z2Goal, hardGoal: plan.hardGoal, liftGoal: plan.liftGoal, planName: plan.name } : base;
+  },
+  prefsBase() {
+    const c = (Store.get('profile', {}) || {}).cardio || {};
+    return { maxHr: c.maxHr || 185, z2Low: c.z2Low || 111, z2High: c.z2High || 130, z2Goal: c.z2Goal || 120, hardGoal: c.hardGoal || 2, liftGoal: c.liftGoal || 3 };
+  },
+  list() { return Store.get('cardio', []).filter(c => !c.deleted); },
+  typeOf(c) { return CARDIO_TYPES[c.type] || { label: c.type || 'Other' }; },
+
+  // Zone 2 minutes. With a Strava heart-rate trace: actual minutes in range.
+  // Manual Zone 2 sessions: full duration, unless the avg HR says otherwise.
+  z2Min(c) {
+    const p = this.prefs();
+    if (c.hist) {
+      let s = 0;
+      for (const [bpm, sec] of Object.entries(c.hist)) if (+bpm >= p.z2Low && +bpm <= p.z2High) s += sec;
+      return Math.round(s / 60);
     }
-    const cardio = Store.get('cardio', []);
-    cardio.unshift(entry);
-    Store.set('cardio', cardio);
-    // Clear form
-    document.getElementById('cardio-dur').value = '';
-    document.getElementById('cardio-dist').value = '';
-    document.getElementById('cardio-hr').value = '';
-    document.getElementById('cardio-cal').value = '';
+    if (!this.typeOf(c).z2) return 0;
+    if (c.hr && (c.hr > p.z2High + 5 || c.hr < p.z2Low - 10)) return 0;
+    return c.duration || 0;
+  },
+  hrWarning(c) {
+    const p = this.prefs();
+    if (c.hist || !this.typeOf(c).z2 || !c.hr) return '';
+    if (c.hr > p.z2High + 5) return 'HR above Zone 2: not counted';
+    if (c.hr < p.z2Low - 10) return 'HR below Zone 2: not counted';
+    return '';
+  },
+  isHard(c) { return c.hard ?? !!this.typeOf(c).hard; },
+
+  weekStats(ws) {
+    const we = addDays(ws, 7);
+    const wk = this.list().filter(c => c.date >= ws && c.date < we);
+    const lifts = Store.get('workouts', []).filter(w => w.date >= ws && w.date < we).length;
+    return {
+      lifts,
+      z2: wk.reduce((s, c) => s + this.z2Min(c), 0),
+      hard: wk.filter(c => this.isHard(c)).length,
+      sessions: wk.length,
+      minutes: wk.reduce((s, c) => s + (c.duration || 0), 0),
+    };
+  },
+  // Pace through the week: where you'd be by end of today if spread evenly.
+  // Never prescribes a day; just flags when you're falling behind.
+  pace(done, goal, unit) {
+    if (this._warm && done < goal) return '<span class="text-dim">Warm-up week: pacing starts Monday</span>';
+    const dayIdx = daysSince(weekStart(localDate())); // 0 = Monday
+    const daysLeft = 6 - dayIdx;                      // after today
+    if (done >= goal) return '<span style="color:var(--success)">Done for the week</span>';
+    const expected = goal * (dayIdx + 1) / 7;
+    const left = goal - done;
+    const need = unit === 'min'
+      ? `${left} min left · ~${Math.ceil(left / (daysLeft + 1))}/day`
+      : `${left} left · ${daysLeft + 1} day${daysLeft ? 's' : ''} to go`;
+    if (unit === 'min' ? done >= expected - 10 : done >= Math.floor(expected)) return `<span class="text-dim">On pace · ${need}</span>`;
+    const behind = unit === 'min' ? Math.round(expected - done) + ' min' : (Math.floor(expected) - done);
+    const tight = unit !== 'min' && left > daysLeft + 1;
+    return `<span style="color:${tight ? 'var(--danger)' : 'var(--warning)'}">Behind pace by ${behind} · ${need}</span>`;
+  },
+  // The week the program started (if it started after Monday) is a warm-up:
+  // shown, but it doesn't nag and doesn't break or count toward the streak.
+  isPartial(ws) {
+    const start = (Store.get('program', {}) || {}).startDate;
+    return !!start && start > ws && start < addDays(ws, 7);
+  },
+  weekHit(ws) {
+    const p = this.prefs(ws), st = this.weekStats(ws);
+    return st.z2 >= p.z2Goal && st.hard >= p.hardGoal && st.lifts >= p.liftGoal;
+  },
+  // Consecutive weeks on target; this week counts once it's already hit.
+  streak() {
+    let ws = weekStart(localDate()), n = 0;
+    if (this.weekHit(ws)) n++;
+    for (let i = 0; i < 104; i++) { ws = addDays(ws, -7); if (this.weekHit(ws)) n++; else if (!this.isPartial(ws)) break; }
+    return n;
+  },
+  weekCard(compact) {
+    const ws = weekStart(localDate()), p = this.prefs(ws), s = this.weekStats(ws), st = this.streak();
+    if (this.isPartial(ws)) this._warm = true; else this._warm = false;
+    const bar = (v, g, color) => `<div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100, Math.round(100 * v / g))}%;background:${color}"></div></div>`;
+    return `
+      <div class="goal-row"><span class="text-dim text-sm">Zone 2${compact ? '' : ` (${p.z2Low}–${p.z2High} bpm)`}</span><span><span class="big">${s.z2}</span> / ${p.z2Goal} min</span></div>
+      ${bar(s.z2, p.z2Goal, 'var(--success)')}
+      <div class="text-sm">${this.pace(s.z2, p.z2Goal, 'min')}</div>
+      <div class="goal-row" style="margin-top:10px"><span class="text-dim text-sm">Hard sessions</span><span class="dots">${this.dots(s.hard, p.hardGoal)}</span></div>
+      <div class="text-sm">${this.pace(s.hard, p.hardGoal)}</div>
+      <div class="goal-row" style="margin-top:10px"><span class="text-dim text-sm">Lifting sessions</span><span class="dots lift">${this.dots(s.lifts, p.liftGoal)}</span></div>
+      <div class="text-sm">${this.pace(s.lifts, p.liftGoal)}</div>
+      <div class="text-sm mt-8" style="color:${st ? 'var(--success)' : 'var(--dim)'}">${st ? `${st} week${st === 1 ? '' : 's'} in a row on target` : 'Streak starts the first week you hit all three'}</div>
+      <div class="row mt-8" style="justify-content:space-between"><span class="text-sm text-dim">${p.planName ? 'This week: ' + esc(p.planName) : ''}</span>
+        <button class="btn btn-outline btn-xs" onclick="event.stopPropagation();Cardio.togglePicker()">${this.pickerOpen ? 'Close' : 'Change this week'}</button></div>
+      ${this.pickerOpen || this.needsComeback() ? this.pickerHtml() : ''}`;
+  },
+  // ---- Getting going again: choices, not penalties
+  pickerOpen: false,
+  togglePicker() { this.pickerOpen = !this.pickerOpen; App.refresh(); },
+  // Offer the picker when last week fell short (or nothing logged in 8+ days)
+  // and nothing has been chosen for this week yet.
+  needsComeback() {
+    const ws = weekStart(localDate());
+    const profile = Store.get('profile', {}) || {};
+    if ((profile.weekPlans || {})[ws]) return false;
+    const start = (Store.get('program', {}) || {}).startDate;
+    if (!start || start >= ws) return false;
+    const last = addDays(ws, -7);
+    if (!this.isPartial(last) && start <= last && !this.weekHit(last)) return true;
+    const dates = this.list().map(c => c.date).concat(Store.get('workouts', []).map(w => w.date)).sort();
+    return dates.length > 0 && daysSince(dates[dates.length - 1]) >= 8;
+  },
+  PLANS: [
+    { key: 'full',   name: 'Full week',          desc: 'Normal targets. Just go.' },
+    { key: 'light',  name: 'Lighter week',       desc: 'About half: 60 min Z2, 1 hard, 2 lifts' },
+    { key: 'cardio', name: 'Cardio comeback',    desc: '120 min Z2, 1 hard, 1 lift' },
+    { key: 'lift',   name: 'Lifting comeback',   desc: '60 min Z2, 1 hard, 3 lifts' },
+    { key: 'move',   name: 'Just move',          desc: '60 min Z2, 0 hard, 1 lift: a busy or rough week' },
+  ],
+  planTargets(key) {
+    const b = this.prefsBase();
+    return {
+      full:   { z2Goal: b.z2Goal, hardGoal: b.hardGoal, liftGoal: b.liftGoal },
+      light:  { z2Goal: Math.round(b.z2Goal / 2), hardGoal: Math.max(1, Math.floor(b.hardGoal / 2)), liftGoal: Math.max(1, b.liftGoal - 1) },
+      cardio: { z2Goal: b.z2Goal, hardGoal: Math.max(1, b.hardGoal - 1), liftGoal: 1 },
+      lift:   { z2Goal: Math.round(b.z2Goal / 2), hardGoal: Math.max(1, b.hardGoal - 1), liftGoal: b.liftGoal },
+      move:   { z2Goal: Math.round(b.z2Goal / 2), hardGoal: 0, liftGoal: 1 },
+    }[key];
+  },
+  pickerHtml() {
+    const comeback = this.needsComeback();
+    let h = `<div style="margin-top:12px;padding:12px;background:var(--surface2);border-radius:10px" onclick="event.stopPropagation()">
+      <div style="font-weight:700;margin-bottom:4px">${comeback ? 'Last week got away from you. How do you want to pick it up?' : 'Plan for this week'}</div>
+      <div class="text-sm text-dim mb-8">Your choice sets this week's targets. Hitting them keeps the streak going.</div>`;
+    this.PLANS.forEach(pl => {
+      h += `<button class="btn btn-outline btn-sm mb-8" style="width:100%;justify-content:space-between;text-align:left" onclick="Cardio.choosePlan('${pl.key}')">
+        <span><strong>${pl.name}</strong><br><span class="text-dim text-sm">${pl.desc}</span></span></button>`;
+    });
+    const prog = Store.get('program', {}) || {};
+    const easing = prog.easeUntil != null && (prog.currentDay || 0) < prog.easeUntil;
+    h += `<label class="check-row" style="margin:6px 0 0"><input type="checkbox" id="ease-loads" ${easing ? 'checked' : ''}> Also ease the next 2 lifting sessions to 85% loads</label></div>`;
+    return h;
+  },
+  choosePlan(key) {
+    const ws = weekStart(localDate());
+    const pl = this.PLANS.find(p => p.key === key);
+    const profile = Store.get('profile', {}) || {};
+    profile.weekPlans = profile.weekPlans || {};
+    profile.weekPlans[ws] = { name: pl.name, ...this.planTargets(key) };
+    Store.set('profile', profile);
+    const ease = document.getElementById('ease-loads');
+    const prog = Store.get('program', null);
+    if (prog && ease) {
+      if (ease.checked) { prog.easeUntil = (prog.currentDay || 0) + 2; prog.easeFactor = 0.85; }
+      else { delete prog.easeUntil; }
+      Store.set('program', prog);
+    }
+    this.pickerOpen = false;
+    App.refresh();
+  },
+
+  dots(n, goal) {
+    let h = '';
+    for (let i = 0; i < Math.max(goal, n); i++) h += `<span class="${i < n ? 'on' : ''}"></span>`;
+    return h;
+  },
+
+  // ---- form
+  onType() {
+    const t = CARDIO_TYPES[document.getElementById('cardio-type').value] || {};
+    document.querySelectorAll('.f-tread').forEach(e => e.classList.toggle('hide', !t.tread));
+    document.querySelectorAll('.f-int').forEach(e => e.classList.toggle('hide', !t.intervals));
+    if (!this.editing) document.getElementById('cardio-hard').checked = !!t.hard;
+    const p = this.prefs();
+    document.getElementById('cardio-hr-label').textContent = t.z2 ? `Avg HR (Z2: ${p.z2Low}–${p.z2High})` : 'Avg HR';
+  },
+  fields: { duration: 'cardio-dur', hr: 'cardio-hr', speed: 'cardio-speed', incline: 'cardio-incline', rounds: 'cardio-rounds', work: 'cardio-work', rest: 'cardio-rest', distance: 'cardio-dist', maxHr: 'cardio-maxhr' },
+  resetForm() {
+    this.editing = null;
+    const sel = document.getElementById('cardio-type');
+    if (!sel.options.length) sel.innerHTML = Object.entries(CARDIO_TYPES).map(([k, t]) => `<option value="${k}">${t.label}</option>`).join('');
+    sel.value = 'z2-tread';
+    document.getElementById('cardio-date').value = localDate();
+    Object.values(this.fields).forEach(id => document.getElementById(id).value = '');
     document.getElementById('cardio-notes').value = '';
+    document.getElementById('cardio-form-title').textContent = 'Log a session';
+    document.getElementById('cardio-save').textContent = 'Log Session';
+    document.getElementById('cardio-cancel').classList.add('hide');
+    this.onType();
+  },
+  edit(id) {
+    const c = Store.get('cardio', []).find(x => x.id === id);
+    if (!c) return;
+    this.resetForm();
+    this.editing = id;
+    document.getElementById('cardio-type').value = CARDIO_TYPES[c.type] ? c.type : 'other';
+    document.getElementById('cardio-date').value = c.date;
+    for (const [f, el] of Object.entries(this.fields)) document.getElementById(el).value = c[f] || '';
+    document.getElementById('cardio-notes').value = c.notes || '';
+    document.getElementById('cardio-hard').checked = this.isHard(c);
+    document.getElementById('cardio-form-title').textContent = 'Edit session' + (c.name ? ': ' + c.name : '');
+    document.getElementById('cardio-save').textContent = 'Save Changes';
+    document.getElementById('cardio-cancel').classList.remove('hide');
+    this.onType();
+    document.getElementById('cardio-form-card').scrollIntoView({ behavior: 'smooth' });
+  },
+  save() {
+    const v = {
+      type: document.getElementById('cardio-type').value,
+      date: document.getElementById('cardio-date').value || localDate(),
+      notes: document.getElementById('cardio-notes').value.trim(),
+      hard: document.getElementById('cardio-hard').checked,
+    };
+    for (const [f, el] of Object.entries(this.fields)) {
+      const n = parseFloat(document.getElementById(el).value);
+      v[f] = isNaN(n) ? 0 : n;
+    }
+    if (!v.duration && !v.distance && !v.notes) { alert('Enter at least a duration, distance, or note.'); return; }
+    const cardio = Store.get('cardio', []);
+    if (this.editing) {
+      const c = cardio.find(x => x.id === this.editing);
+      if (c) Object.assign(c, v);
+    } else {
+      cardio.push({ id: 'm' + Date.now(), source: 'manual', time: new Date().toTimeString().slice(0, 5), ...v });
+    }
+    this.sortAndSave(cardio);
+    this.resetForm();
     this.render();
+  },
+  remove(id) {
+    const cardio = Store.get('cardio', []);
+    const c = cardio.find(x => x.id === id);
+    if (!c || !confirm('Delete this session?')) return;
+    // Strava entries keep a tombstone so the next Strava pull doesn't bring them back.
+    const next = c.source === 'strava' ? cardio.map(x => x.id === id ? { id, source: 'strava', deleted: true, date: x.date } : x) : cardio.filter(x => x.id !== id);
+    this.sortAndSave(next);
+    this.render();
+  },
+  sortAndSave(cardio) {
+    cardio.sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')));
+    Store.set('cardio', cardio);
+  },
+
+  // ---- render
+  renderWeek() {
+    const p = this.prefs();
+    const today = localDate();
+    const ws = weekStart(today);
+    const s = this.weekStats(ws);
+    const daysLeft = 7 - daysSince(ws) - 1;
+    let html = `<div class="card">
+      <div class="row" style="justify-content:space-between"><div class="card-title" style="margin:0">This week</div><span class="text-dim text-sm">${daysLeft + 1} day${daysLeft ? 's' : ''} left incl. today</span></div>
+      ${this.weekCard(false)}
+      <table class="wk-table"><tr class="text-dim"><td>Week of</td><td>Zone 2</td><td>Hard</td><td>Lifts</td><td></td></tr>`;
+    for (let i = 1; i <= 6; i++) {
+      const w = addDays(ws, -7 * i);
+      const st = this.weekStats(w);
+      const hit = this.weekHit(w);
+      html += `<tr><td>${parseLocal(w).toLocaleDateString([], { month: 'short', day: 'numeric' })}</td><td>${st.z2} min</td><td>${st.hard}</td><td>${st.lifts}</td><td>${hit ? '<span style="color:var(--success)">✓</span>' : '<span class="text-dim">–</span>'}</td></tr>`;
+    }
+    html += `</table></div>`;
+    document.getElementById('cardio-week').innerHTML = html;
+  },
+
+  renderEntry(c) {
+    const t = this.typeOf(c);
+    const z2 = this.z2Min(c);
+    const warn = this.hrWarning(c);
+    const bits = [];
+    if (c.speed) bits.push(c.speed + ' mph');
+    if (c.incline) bits.push(c.incline + '% incline');
+    if (c.rounds) bits.push(`${c.rounds} × ${c.work || '?'}s on / ${c.rest || '?'}s off`);
+    return `<div class="cardio-entry" style="display:block">
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-weight:600">${esc(t.label)}${c.source === 'strava' ? '<span class="chip chip-strava">Strava</span>' : ''}${this.isHard(c) ? '<span class="chip chip-hard">HARD</span>' : ''}${z2 ? `<span class="chip chip-z2">Z2 ${z2}m</span>` : ''}</div>
+          <div class="text-dim text-sm">${parseLocal(c.date).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}${c.time ? ' ' + c.time : ''}${c.name ? ' · ' + esc(c.name) : ''}</div>
+          ${bits.length ? `<div class="text-sm text-dim">${bits.join(' · ')}</div>` : ''}
+          ${warn ? `<div class="text-sm"><span class="chip chip-warn" style="margin:0">${warn}</span></div>` : ''}
+          ${c.notes ? `<div class="text-sm mt-8">${esc(c.notes)}</div>` : ''}
+        </div>
+        <div style="text-align:right;white-space:nowrap">
+          ${c.duration ? `<div>${c.duration} min</div>` : ''}
+          ${c.distance ? `<div class="text-sm text-dim">${c.distance} mi</div>` : ''}
+          ${c.hr ? `<div class="text-sm text-dim">avg ${c.hr} bpm</div>` : ''}
+          ${c.maxHr ? `<div class="text-sm text-dim">max ${c.maxHr}</div>` : ''}
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-outline btn-xs" onclick="Cardio.edit('${c.id}')">Edit</button>
+        <button class="btn btn-outline btn-xs" onclick="Cardio.remove('${c.id}')">Delete</button>
+      </div>
+    </div>`;
   },
 
   render() {
-    const cardio = Store.get('cardio', []);
+    if (!this.editing) this.resetForm();
+    this.renderWeek();
+    Strava.renderCard();
+    const cardio = this.list();
     const list = document.getElementById('cardio-list');
-    if (!cardio.length) {
-      list.innerHTML = '<div class="text-dim text-sm text-center" style="padding:16px">No cardio logged yet. Get moving!</div>';
-      return;
-    }
-    let html = '';
-    cardio.slice(0, 30).forEach((c, i) => {
-      html += `<div class="cardio-entry">
-        <div>
-          <div style="font-weight:600">${c.type}</div>
-          <div class="text-dim text-sm">${c.date}${c.time ? ' ' + c.time : ''}</div>
-          ${c.notes ? `<div class="text-sm mt-8">${c.notes}</div>` : ''}
-        </div>
-        <div style="text-align:right">
-          ${c.duration ? `<div>${c.duration} min</div>` : ''}
-          ${c.distance ? `<div class="text-sm text-dim">${c.distance} mi</div>` : ''}
-          ${c.hr ? `<div class="text-sm text-dim">${c.hr} bpm</div>` : ''}
-          ${c.calories ? `<div class="text-sm text-dim">${c.calories} cal</div>` : ''}
-        </div>
-      </div>`;
-    });
-    list.innerHTML = html;
-
-    // Weekly summary
-    const thisWeek = cardio.filter(c => daysSince(c.date) <= 7);
-    const totalMin = thisWeek.reduce((s, c) => s + (c.duration || 0), 0);
-    if (thisWeek.length > 0) {
-      const summary = document.createElement('div');
-      summary.className = 'text-sm text-center mt-8';
-      summary.style.color = 'var(--success)';
-      summary.textContent = `This week: ${thisWeek.length} sessions, ${totalMin} min total`;
-      list.parentNode.insertBefore(summary, list);
-    }
+    list.innerHTML = cardio.length
+      ? cardio.slice(0, 40).map(c => this.renderEntry(c)).join('')
+      : '<div class="text-dim text-sm text-center" style="padding:16px">No cardio logged yet. Get moving!</div>';
   }
+};
+
+// ===================== STRAVA =====================
+const Strava = {
+  status: null,
+  busy: false,
+  msg: '',
+
+  async refreshStatus() {
+    try { const r = await Sync.api('GET', '/api/strava/status'); this.status = r.ok ? await r.json() : null; }
+    catch { this.status = null; }
+    this.renderCard();
+  },
+  async connect() {
+    try {
+      const r = await Sync.api('POST', '/api/strava/start', {});
+      const j = await r.json();
+      if (j.url) location.href = j.url; else alert(j.error || 'Could not start Strava connection.');
+    } catch (e) { alert(e.message); }
+  },
+  async disconnect() {
+    if (!confirm('Disconnect Strava? Imported sessions stay.')) return;
+    try { await Sync.api('POST', '/api/strava/disconnect', {}); } catch {}
+    await this.refreshStatus(); Settings.renderStrava(); this.renderCard();
+  },
+  sportType(s) {
+    if (/Run/.test(s)) return 'run';
+    if (/Walk|Hike/.test(s)) return 'walk';
+    if (/Ride/.test(s)) return 'bike';
+    return 'other';
+  },
+  async pull() {
+    if (this.busy) return;
+    this.busy = true; this.msg = 'Pulling from Strava…'; this.renderCard();
+    try {
+      const profile = Store.get('profile', {}) || {};
+      // Look back 3 weeks each time (catches edits and late heart-rate data); 45 days on first pull.
+      const after = Math.floor(Date.now() / 1000) - (profile.stravaLast ? 21 : 45) * 86400;
+      const r = await Sync.api('POST', '/api/strava/sync', { after });
+      const j = await r.json();
+      if (!r.ok || j.error) throw new Error(j.error || 'Strava sync failed');
+      const cardio = Store.get('cardio', []);
+      const gym = Store.get('stravaGym', []);
+      let added = 0, gymAdded = 0;
+      for (const a of j.activities) {
+        const id = 's' + a.id;
+        const base = {
+          date: a.start.slice(0, 10), time: a.start.slice(11, 16), name: a.name, sport: a.sport,
+          hr: a.avgHr ? Math.round(a.avgHr) : 0, maxHr: a.maxHr ? Math.round(a.maxHr) : 0, hist: a.hist || null,
+        };
+        if (STRAVA_GYM.includes(a.sport)) {
+          const g = gym.find(x => x.id === id);
+          const rec = { id, ...base, duration: Math.round(a.elapsed / 60) };
+          if (g) Object.assign(g, rec); else { gym.push(rec); gymAdded++; }
+          continue;
+        }
+        const c = cardio.find(x => x.id === id);
+        if (c) {
+          if (c.deleted) continue;
+          // Refresh Strava's numbers; keep anything you changed (type, notes, speed…).
+          Object.assign(c, { name: base.name, hr: base.hr, maxHr: base.maxHr, hist: base.hist || c.hist });
+        } else {
+          cardio.push({
+            id, source: 'strava', stravaId: a.id, ...base, type: this.sportType(a.sport),
+            duration: Math.round(a.moving / 60), distance: +(a.distance / 1609.344).toFixed(2), notes: '',
+          });
+          added++;
+        }
+      }
+      Cardio.sortAndSave(cardio);
+      gym.sort((a, b) => b.date.localeCompare(a.date));
+      Store.set('stravaGym', gym);
+      profile.stravaLast = Date.now();
+      Store.set('profile', profile);
+      this.msg = `Imported ${added} new session${added === 1 ? '' : 's'}${gymAdded ? ` and ${gymAdded} gym workout${gymAdded === 1 ? '' : 's'}` : ''}.` +
+        (j.pendingHr ? ` ${j.pendingHr} still need heart-rate data; pull again in 15 min.` : '');
+    } catch (e) { this.msg = e.message; }
+    this.busy = false;
+    if (Nav.current === 'cardio') Cardio.render();
+  },
+  renderCard() {
+    const el = document.getElementById('cardio-strava');
+    if (!el) return;
+    const s = this.status;
+    if (!s || !s.configured) { el.classList.add('hide'); return; }
+    el.classList.remove('hide');
+    el.innerHTML = s.connected
+      ? `<div class="row" style="justify-content:space-between"><span class="text-sm"><span class="chip chip-strava" style="margin:0">Strava</span> ${esc(s.athlete || 'connected')}</span>
+           <button class="btn btn-outline btn-sm" ${this.busy ? 'disabled' : ''} onclick="Strava.pull()">${this.busy ? 'Pulling…' : 'Pull activities'}</button></div>
+         ${this.msg ? `<div class="text-sm text-dim mt-8">${esc(this.msg)}</div>` : ''}`
+      : `<button class="btn btn-outline btn-sm" onclick="Strava.connect()">Connect Strava</button>`;
+  },
 };
 
 // ===================== HISTORY =====================
@@ -1334,6 +1932,7 @@ const History = {
       return;
     }
     let html = '';
+    const gym = Store.get('stravaGym', []);
     const reversed = [...workouts].reverse();
     reversed.slice(0, 50).forEach(w => {
       html += `<div class="card">
@@ -1341,7 +1940,11 @@ const History = {
           <span style="font-weight:700">Day ${w.dayLabel}: ${w.dayName}</span>
           <span class="text-dim text-sm">${w.date}</span>
         </div>
-        <div class="text-sm text-dim mb-8">Week ${w.absWeek} &middot; ${w.duration} min ${w.completed ? '' : '(partial)'}${w.timer ? ` &middot; work ${Math.round(w.timer.totalWork/60)}m / rest ${Math.round(w.timer.totalRest/60)}m &middot; avg rest ${Math.floor(w.timer.avgRest/60)}:${String(w.timer.avgRest%60).padStart(2,'0')}${w.timer.restOver ? ' &middot; <span style="color:var(--danger)">' + w.timer.restOver + ' over limit</span>' : ''}` : ''}</div>`;
+        <div class="text-sm text-dim mb-8">Week ${w.absWeek} &middot; ${w.duration} min ${w.completed ? '' : '(partial)'}${w.timer ? ` &middot; work ${Math.round(w.timer.totalWork/60)}m / rest ${Math.round(w.timer.totalRest/60)}m &middot; avg rest ${Math.floor(w.timer.avgRest/60)}:${String(w.timer.avgRest%60).padStart(2,'0')}${w.timer.restPeriods ? ` &middot; ${w.timer.restPeriods - w.timer.restOver}/${w.timer.restPeriods} rests on time` : ''}${w.timer.restOver ? ' &middot; <span style="color:var(--danger)">' + w.timer.restOver + ' over limit</span>' : ''}` : ''}</div>`;
+      const hrRec = gym.find(g => g.date === w.date);
+      if (hrRec && hrRec.hr) {
+        html += `<div class="text-sm mb-8"><span class="chip chip-strava" style="margin:0 4px 0 0">Strava</span>HR avg ${hrRec.hr}${hrRec.maxHr ? ' · max ' + hrRec.maxHr : ''}</div>`;
+      }
 
       if (w.exercises) {
         w.exercises.forEach(ex => {
@@ -1362,20 +1965,44 @@ const History = {
 // ===================== SETTINGS =====================
 const Settings = {
   render() {
-    const prog = Store.get('program', {});
+    const prog = Store.get('program', {}) || {};
     const { block } = getBlockAndWeek(prog.currentDay || 0);
     const maxes = getMaxes(block);
-    const profile = Store.get('profile', {});
+    const profile = Store.get('profile', {}) || {};
 
     document.getElementById('set-squat').value = maxes.squat;
     document.getElementById('set-bench').value = maxes.bench;
     document.getElementById('set-deadlift').value = maxes.deadlift;
     document.getElementById('set-bw').value = profile.bodyweight || 230;
     document.getElementById('set-nudge').value = profile.nudge || 120;
+    const p = Cardio.prefs();
+    document.getElementById('set-maxhr').value = p.maxHr;
+    document.getElementById('set-z2low').value = p.z2Low;
+    document.getElementById('set-z2high').value = p.z2High;
+    document.getElementById('set-z2goal').value = p.z2Goal;
+    document.getElementById('set-hardgoal').value = p.hardGoal;
+    document.getElementById('set-liftgoal').value = p.liftGoal;
+    Sync.setState(Sync.state);
+    this.renderStrava();
+    Strava.refreshStatus().then(() => this.renderStrava());
+  },
+
+  renderStrava() {
+    const s = Strava.status, st = document.getElementById('strava-status'), b = document.getElementById('strava-buttons');
+    if (!st) return;
+    if (!s) { st.textContent = 'Could not reach the server.'; b.innerHTML = ''; return; }
+    if (!s.configured) { st.innerHTML = 'Not set up yet. The server needs a Strava API app (one-time step on strava.com).'; b.innerHTML = ''; return; }
+    if (s.connected) {
+      st.innerHTML = `Connected${s.athlete ? ' as ' + esc(s.athlete) : ''}. Runs and walks go to Cardio; "Workout" / "Weight Training" attach to that day's lift.`;
+      b.innerHTML = `<button class="btn btn-outline btn-sm flex-1" onclick="Nav.go('cardio');Strava.pull()">Pull now</button><button class="btn btn-outline btn-sm flex-1" onclick="Strava.disconnect()">Disconnect</button>`;
+    } else {
+      st.textContent = 'Ready to connect.';
+      b.innerHTML = `<button class="btn btn-outline btn-sm flex-1" onclick="Strava.connect()">Connect Strava</button>`;
+    }
   },
 
   saveMaxes() {
-    const prog = Store.get('program', {});
+    const prog = Store.get('program', {}) || {};
     const { block } = getBlockAndWeek(prog.currentDay || 0);
     if (!prog.blockMaxes) prog.blockMaxes = [null, null, null, null];
     prog.blockMaxes[block] = {
@@ -1384,17 +2011,33 @@ const Settings = {
       deadlift: parseInt(document.getElementById('set-deadlift').value) || 0,
     };
     Store.set('program', prog);
-    const profile = Store.get('profile', {});
+    const profile = Store.get('profile', {}) || {};
     profile.bodyweight = parseInt(document.getElementById('set-bw').value) || 230;
     Store.set('profile', profile);
     alert('Maxes updated!');
   },
 
   saveNudge() {
-    const profile = Store.get('profile', {});
+    const profile = Store.get('profile', {}) || {};
     profile.nudge = parseInt(document.getElementById('set-nudge').value) || 120;
     Store.set('profile', profile);
     alert('Timer updated!');
+  },
+
+  saveCardio() {
+    const profile = Store.get('profile', {}) || {};
+    const n = id => parseInt(document.getElementById(id).value) || 0;
+    const c = { maxHr: n('set-maxhr') || 185, z2Low: n('set-z2low') || 111, z2High: n('set-z2high') || 130, z2Goal: n('set-z2goal') || 120, hardGoal: n('set-hardgoal') || 2, liftGoal: n('set-liftgoal') || 3 };
+    if (c.z2Low >= c.z2High) { alert('Zone 2 low must be below high.'); return; }
+    profile.cardio = c;
+    Store.set('profile', profile);
+    alert('Weekly goals updated!');
+  },
+
+  z2FromMax() {
+    const max = parseInt(document.getElementById('set-maxhr').value) || 185;
+    document.getElementById('set-z2low').value = Math.round(max * 0.6);
+    document.getElementById('set-z2high').value = Math.round(max * 0.7);
   },
 
   exportData() {
@@ -1403,7 +2046,7 @@ const Settings = {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'ph3-backup-' + new Date().toISOString().split('T')[0] + '.json';
+    a.download = 'ph3-backup-' + localDate() + '.json';
     a.click();
     URL.revokeObjectURL(url);
   },
@@ -1419,6 +2062,7 @@ const Settings = {
         if (data.program) Store.set('program', data.program);
         if (data.workouts) Store.set('workouts', data.workouts);
         if (data.cardio) Store.set('cardio', data.cardio);
+        if (data.stravaGym) Store.set('stravaGym', data.stravaGym);
         alert('Data imported!');
         Nav.go('home');
       } catch {
@@ -1432,16 +2076,32 @@ const Settings = {
     if (confirm('Clear all workout and cardio history? Your program progress and maxes will be kept.')) {
       Store.set('workouts', []);
       Store.set('cardio', []);
+      Store.set('stravaGym', []);
       Store.set('activeWorkout', null);
       alert('History cleared!');
       Nav.go('home');
     }
   },
 
+  // Keeps history and settings; just goes back to setup for a fresh 13 weeks.
+  newProgram() {
+    if (confirm('Start a new 13-week program? Your history and cardio are kept.')) {
+      Store.set('program', null);
+      Nav.go('setup');
+    }
+  },
+
+  // Clears everything here AND on the server (the server keeps an internal
+  // version history, so this is recoverable).
   resetAll() {
-    if (confirm('This will delete ALL data and start fresh. Are you sure?')) {
-      localStorage.clear();
-      location.reload();
+    if (confirm('This will delete ALL data (on the server too) and start fresh. Are you sure?')) {
+      Store.set('profile', null);
+      Store.set('program', null);
+      Store.set('workouts', []);
+      Store.set('cardio', []);
+      Store.set('stravaGym', []);
+      Store.set('activeWorkout', null);
+      Sync.syncNow().finally(() => location.reload());
     }
   }
 };
@@ -1597,31 +2257,40 @@ const ExPicker = {
 // ===================== APP =====================
 const App = {
   init() {
-    // Check for active workout
+    // Resume an in-progress workout
     const active = Store.get('activeWorkout', null);
     if (active) {
       Workout.data = active;
       Timer.show();
       Timer.start('resting');
+      Nav.current = 'workout';
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.getElementById('page-workout').classList.add('active');
       Workout.render();
       return;
     }
-
-    // Check if setup needed
-    const profile = Store.get('profile', null);
-    if (!profile) {
-      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-      document.getElementById('page-setup').classList.add('active');
-      return;
-    }
-
+    if (!Store.get('program', null)) { Nav.go('setup'); return; }
     Nav.go('home');
   },
 
+  // Re-render after new data arrived from the server.
+  refresh() {
+    if (Nav.current === 'workout') return;
+    if (Store.get('activeWorkout', null) || !Store.get('program', null) || Nav.current === 'setup') { this.init(); return; }
+    Nav.go(Nav.current);
+  },
+
+  fillSetup() {
+    const profile = Store.get('profile', {}) || {};
+    const set = (id, v) => { if (v) document.getElementById(id).value = v; };
+    set('setup-squat', profile.squat); set('setup-bench', profile.bench); set('setup-deadlift', profile.deadlift);
+    set('setup-bw', profile.bodyweight); set('setup-nudge', profile.nudge);
+  },
+
   finishSetup() {
+    const old = Store.get('profile', {}) || {};
     const profile = {
+      ...old,
       squat: parseInt(document.getElementById('setup-squat').value) || 285,
       bench: parseInt(document.getElementById('setup-bench').value) || 170,
       deadlift: parseInt(document.getElementById('setup-deadlift').value) || 285,
@@ -1632,7 +2301,8 @@ const App = {
 
     const program = {
       currentDay: 0,
-      startDate: new Date().toISOString().split('T')[0],
+      startDate: localDate(),
+      ramp: parseInt(document.getElementById('setup-ramp').value) || 0,
       blockMaxes: [
         { squat: profile.squat, bench: profile.bench, deadlift: profile.deadlift },
         null, null, null,
@@ -1641,8 +2311,28 @@ const App = {
     Store.set('program', program);
 
     Nav.go('home');
+  },
+
+  async boot() {
+    const hash = location.hash;
+    if (hash.startsWith('#strava=')) history.replaceState(null, '', location.pathname);
+    Sync.setState(Sync.pending() ? 'pending' : 'none');
+    // Give the server a few seconds to hand us the latest; fall back to local if offline.
+    await Promise.race([Sync.syncNow(), new Promise(r => setTimeout(r, 5000))]);
+    Strava.refreshStatus();
+    this.init();
+    if (hash === '#strava=connected') {
+      await Strava.refreshStatus();
+      Nav.go('cardio');
+      Strava.pull();
+    } else if (hash === '#strava=failed') {
+      alert('Strava connection did not complete. Try again from Settings.');
+    }
   }
 };
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && Timer.state !== 'idle') Timer.keepAwake();
+});
 
 // ===================== SERVICE WORKER =====================
 if ('serviceWorker' in navigator) {
@@ -1650,7 +2340,7 @@ if ('serviceWorker' in navigator) {
 }
 
 // ===================== INIT =====================
-App.init();
+App.boot();
 </script>
 </body>
 </html>
