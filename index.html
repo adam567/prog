@@ -1082,12 +1082,18 @@ const Planner = {
 // program is a fixed date range; sessions inside a week are flexible.
 const Schedule = {
   WEEKLY: 4,
+  // Week 1 begins the day of your first session in this program (any weekday);
+  // until then it's provisional: "if you start today".
+  firstSession() {
+    const prog = Store.get('program', {}) || {};
+    const from = prog.startDate || '0000';
+    const ds = Store.get('workouts', []).map(w => w.date).filter(d => d && d >= from).sort();
+    return ds[0] || null;
+  },
+  started() { const p = Store.get('program', {}) || {}; return !!(p.schedStart || this.firstSession()); },
   start() {
     const prog = Store.get('program', {}) || {};
-    if (prog.schedStart) return prog.schedStart;
-    const s = prog.startDate || localDate();
-    const dow = (parseLocal(s).getDay() + 6) % 7; // 0 = Monday
-    return dow <= 2 ? weekStart(s) : addDays(weekStart(s), 7); // Thu-Sun setup -> next Monday
+    return prog.schedStart || this.firstSession() || localDate();
   },
   end() { return addDays(this.start(), 13 * 7 - 1); },
   weekRange(n) { const a = addDays(this.start(), 7 * (n - 1)); return [a, addDays(a, 6)]; },
@@ -1102,7 +1108,7 @@ const Schedule = {
     const prog = Store.get('program', {}) || {};
     const done = prog.currentDay || 0;
     const cw = Math.max(0, Math.min(13, this.calendarWeek()));
-    if (daysSince(this.start()) < 0) return { done, cw: 0, text: `Starts ${this.fmt(this.start())}`, tone: 'dim' };
+    if (!this.started()) return { done, cw: 0, text: 'Week 1 starts the day you do your first session', tone: 'dim' };
     const dueByEndOfWeek = Math.min(totalDays(), cw * this.WEEKLY);
     const dueByLastWeek = Math.min(totalDays(), (cw - 1) * this.WEEKLY);
     const left = dueByEndOfWeek - done;
@@ -1126,7 +1132,7 @@ const Schedule = {
         <span class="text-sm text-dim">${br ? `weeks ${br.from}–${br.to}, ends ${this.fmt(this.weekRange(br.to)[1])}` : ''}</span>
       </div>
       <div class="text-sm mt-8" style="color:${color}">${cw && cw !== absWeek && st.tone !== 'dim' ? `Calendar week ${cw} · ` : ''}${st.text}</div>
-      <div class="text-sm text-dim">Program: ${this.fmt(this.start())} → ${this.fmt(this.end())}</div>
+      <div class="text-sm text-dim">Program: ${this.fmt(this.start())} → ${this.fmt(this.end())}${this.started() ? '' : ' (if you start today)'}</div>
     </div>`;
   },
 };
