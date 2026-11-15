@@ -243,11 +243,18 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
   <div class="brand-header"><div class="brand-logo">PH3</div><div><h1>Settings</h1><div class="brand-sub">Configuration</div></div></div>
   <div class="card">
     <div class="card-title">Override 1RM</div>
-    <p class="text-dim text-sm mb-8">Change any lift's working max. Takes effect on your next workout.</p>
+    <p class="text-dim text-sm mb-8">Working max for this block. Day A weights are 72.5% of it (e.g. 310 → 225 squat). Takes effect on your next workout.</p>
     <div class="input-group"><label>Squat</label><input type="number" id="set-squat" step="5"></div>
     <div class="input-group"><label>Bench</label><input type="number" id="set-bench" step="5"></div>
     <div class="input-group"><label>Deadlift</label><input type="number" id="set-deadlift" step="5"></div>
     <div class="input-group"><label>Bodyweight</label><input type="number" id="set-bw" step="1"></div>
+    <div class="input-group"><label>Ease-in (lighter first weeks)</label>
+      <select id="set-ramp">
+        <option value="0">Off: full program loads</option>
+        <option value="2">2 weeks: 70% then 85%</option>
+        <option value="3">3 weeks: 70%, 80%, 90%</option>
+      </select>
+    </div>
     <button class="btn btn-primary btn-sm" onclick="Settings.saveMaxes()">Update</button>
   </div>
   <div class="card mt-16">
@@ -2323,6 +2330,7 @@ const Settings = {
     document.getElementById('set-deadlift').value = maxes.deadlift;
     document.getElementById('set-bw').value = profile.bodyweight || 230;
     document.getElementById('set-nudge').value = profile.nudge || 120;
+    document.getElementById('set-ramp').value = String(prog.ramp || 0);
     const p = Cardio.prefs();
     document.getElementById('set-maxhr').value = p.maxHr;
     document.getElementById('set-z2low').value = p.z2Low;
@@ -2358,6 +2366,7 @@ const Settings = {
       bench: parseInt(document.getElementById('set-bench').value) || 0,
       deadlift: parseInt(document.getElementById('set-deadlift').value) || 0,
     };
+    prog.ramp = parseInt(document.getElementById('set-ramp').value) || 0;
     Store.set('program', prog);
     const profile = Store.get('profile', {}) || {};
     profile.bodyweight = parseInt(document.getElementById('set-bw').value) || 230;
