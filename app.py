@@ -66,6 +66,8 @@ def init_db():
             CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS strava_hr (
               id INTEGER PRIMARY KEY, hist TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS strava_series (
+              id INTEGER PRIMARY KEY, data TEXT NOT NULL);
             """
         )
 
@@ -118,6 +120,33 @@ def hr_histogram(stream):
     return hist
 
 
+GYM_SPORTS = {"WeightTraining", "Workout", "Crossfit"}
+
+
+def save_series(act_id, stream):
+    t = stream.get("time", {}).get("data") or []
+    hr = stream.get("heartrate", {}).get("data") or []
+    n = min(len(t), len(hr))
+    data = json.dumps({"t": t[:n], "hr": hr[:n]})
+    with _db_lock, db() as c:
+        c.execute("INSERT OR REPLACE INTO strava_series(id,data) VALUES(?,?)", (act_id, data))
+    return data
+
+
+def strava_series(act_id):
+    """Second-by-second heart rate for one activity (cached after first fetch)."""
+    with db() as c:
+        r = c.execute("SELECT data FROM strava_series WHERE id=?", (act_id,)).fetchone()
+    if r:
+        return json.loads(r["data"])
+    token = strava_token()
+    if not token:
+        return {"error": "not connected"}
+    s = _http_json(f"https://www.strava.com/api/v3/activities/{act_id}/streams?"
+                   "keys=heartrate,time&key_by_type=true", token=token)
+    return json.loads(save_series(act_id, s))
+
+
 def strava_sync(after):
     token = strava_token()
     if not token:
@@ -142,6 +171,8 @@ def strava_sync(after):
                         f"https://www.strava.com/api/v3/activities/{a['id']}/streams?"
                         "keys=heartrate,time&key_by_type=true", token=token)
                     hist = hr_histogram(s)
+                    if (a.get("sport_type") or a.get("type")) in GYM_SPORTS:
+                        save_series(a["id"], s)  # keep the full trace for set-by-set analysis
                     with _db_lock, db() as c:
                         c.execute("INSERT OR REPLACE INTO strava_hr(id,hist) VALUES(?,?)",
                                   (a["id"], json.dumps(hist)))
@@ -151,6 +182,7 @@ def strava_sync(after):
             "id": a["id"], "name": a.get("name", ""),
             "sport": a.get("sport_type") or a.get("type"),
             "start": a.get("start_date_local"),
+            "startUtc": a.get("start_date"),
             "moving": a.get("moving_time", 0), "elapsed": a.get("elapsed_time", 0),
             "distance": a.get("distance", 0), "elev": a.get("total_elevation_gain", 0),
             "avgHr": a.get("average_heartrate"), "maxHr": a.get("max_heartrate"),
@@ -226,6 +258,16 @@ class Handler(BaseHTTPRequestHandler):
             with db() as c:
                 rows = c.execute("SELECT key,value,updated FROM docs").fetchall()
             return self._send(200, {r["key"]: {"value": json.loads(r["value"]), "updated": r["updated"]} for r in rows})
+        if path.startswith("/api/strava/series/"):
+            act = path.rsplit("/", 1)[1]
+            if not act.isdigit():
+                return self._send(400, {"error": "bad id"})
+            try:
+                return self._send(200, strava_series(int(act)))
+            except urllib.error.HTTPError as e:
+                return self._send(502, {"error": f"Strava returned {e.code}"})
+            except (urllib.error.URLError, TimeoutError):
+                return self._send(504, {"error": "Strava unreachable"})
         if path == "/api/strava/status":
             tok = meta_get("strava_tokens")
             return self._send(200, {"configured": bool(STRAVA_ID and STRAVA_SECRET),

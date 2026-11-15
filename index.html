@@ -1254,6 +1254,9 @@ const Workout = {
     const s = this.data.exercises[ei].sets[si];
     if (this.activeSet && this.activeSet.startTime) {
       s.tut = Math.round((Date.now() - this.activeSet.startTime) / 1000);
+      // Exact set window, for lining up with a Strava heart-rate trace.
+      s.startedAt = this.activeSet.startTime;
+      s.endedAt = Date.now();
     }
     s.done = true;
     this.clearActiveTimers();
@@ -1397,6 +1400,8 @@ const Workout = {
           actualWeight: s.actualWeight,
           actualReps: s.actualReps,
           tut: s.tut || 0,
+          startedAt: s.startedAt || null,
+          endedAt: s.endedAt || null,
           isAmrap: s.isAmrap,
         }))
       }))
@@ -1915,6 +1920,168 @@ const BadNight = {
   },
 };
 
+// ===================== HEART RATE BREAKDOWN =====================
+// Lines up the set start/stop times the app records with the second-by-second
+// heart rate from a Strava "Workout" recorded at the same time.
+const HrView = {
+  cache: {},
+  views: {},
+  G: { W: 340, H: 160, L: 28, R: 4, T: 10, B: 18 }, // drawn at roughly phone width so text stays readable
+
+  // The Strava gym activity whose time window overlaps this workout (falls back to same date).
+  match(w, gym) {
+    if (w.startedAt) {
+      const ws = w.startedAt, we = w.endedAt || ws + (w.duration || 60) * 60000;
+      const g = gym.find(g => {
+        if (!g.startUtc) return false;
+        const gs = Date.parse(g.startUtc), ge = gs + (g.elapsed || (g.duration || 0) * 60) * 1000;
+        return gs < we && ge > ws;
+      });
+      if (g) return g;
+    }
+    return gym.find(g => g.date === w.date);
+  },
+
+  async toggle(wi) {
+    const el = document.getElementById('hrv-' + wi);
+    if (!el) return;
+    if (el.innerHTML) { el.innerHTML = ''; return; }
+    const w = Store.get('workouts', [])[wi];
+    const g = this.match(w, Store.get('stravaGym', []));
+    if (!g) return;
+    el.innerHTML = '<div class="text-sm text-dim mb-8">Loading heart rate…</div>';
+    try {
+      let s = this.cache[g.id];
+      if (!s) {
+        const r = await Sync.api('GET', '/api/strava/series/' + g.id.replace(/^s/, ''));
+        s = await r.json();
+        if (!r.ok || s.error) throw new Error(s.error || 'Could not load heart rate');
+        this.cache[g.id] = s;
+      }
+      el.innerHTML = this.render(wi, w, g, s);
+    } catch (e) {
+      el.innerHTML = `<div class="text-sm mb-8" style="color:var(--danger)">${esc(e.message)}</div>`;
+    }
+  },
+
+  // ---- analysis
+  analyze(w, g, s) {
+    const t0 = Date.parse(g.startUtc);
+    const pts = s.t.map((t, i) => ({ ms: t0 + t * 1000, hr: s.hr[i] })).filter(p => p.hr > 0);
+    const inRange = (a, b) => pts.filter(p => p.ms >= a && p.ms <= b);
+    const avg = arr => arr.length ? Math.round(arr.reduce((x, p) => x + p.hr, 0) / arr.length) : null;
+    const max = arr => arr.length ? Math.max(...arr.map(p => p.hr)) : null;
+    const nearest = ms => {
+      let lo = 0, hi = pts.length - 1;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (pts[mid].ms < ms) lo = mid + 1; else hi = mid; }
+      return pts[lo] && Math.abs(pts[lo].ms - ms) < 15000 ? pts[lo].hr : null;
+    };
+    const sets = [];
+    (w.exercises || []).forEach(ex => (ex.sets || []).forEach((st, i) => {
+      if (st.startedAt && st.endedAt) sets.push({ ex: ex.name, n: i + 1, start: st.startedAt, end: st.endedAt, weight: st.actualWeight, reps: st.actualReps });
+    }));
+    sets.sort((a, b) => a.start - b.start);
+    sets.forEach((st, i) => {
+      const during = inRange(st.start, st.end);
+      st.avg = avg(during);
+      // Heart rate keeps climbing for a few seconds after the last rep.
+      st.peak = max(inRange(st.start, st.end + 20000));
+      const next = sets[i + 1];
+      if (next) {
+        st.rest = Math.round((next.start - st.end) / 1000);
+        const hr60 = st.rest >= 60 ? nearest(st.end + 60000) : null;
+        st.drop60 = st.peak && hr60 ? st.peak - hr60 : null;
+        st.restStartHr = nearest(next.start);
+      }
+    });
+    const setPts = pts.filter(p => sets.some(st => p.ms >= st.start && p.ms <= st.end));
+    const drops = sets.filter(x => x.drop60 != null).map(x => x.drop60);
+    const rests = sets.filter(x => x.rest != null).map(x => x.rest);
+    return {
+      pts, sets,
+      start: pts.length ? pts[0].ms : t0, end: pts.length ? pts[pts.length - 1].ms : t0,
+      avgAll: avg(pts), peakAll: max(pts), avgSets: avg(setPts),
+      avgDrop: drops.length ? Math.round(drops.reduce((a, b) => a + b, 0) / drops.length) : null,
+      avgRest: rests.length ? Math.round(rests.reduce((a, b) => a + b, 0) / rests.length) : null,
+    };
+  },
+
+  // ---- render
+  render(wi, w, g, s) {
+    const a = this.analyze(w, g, s);
+    if (!a.pts.length) return '<div class="text-sm text-dim mb-8">This Strava activity has no heart-rate data.</div>';
+    this.views[wi] = a;
+    const p = Cardio.prefs();
+    const { W, H, L, R, T, B } = this.G;
+    const lo = Math.min(...a.pts.map(x => x.hr)) - 5, hi = Math.max(...a.pts.map(x => x.hr)) + 5;
+    const x = ms => L + (ms - a.start) / Math.max(1, a.end - a.start) * (W - L - R);
+    const y = hr => T + (hi - hr) / (hi - lo) * (H - T - B);
+    // Thin the line to ~1 point per pixel.
+    const step = Math.max(1, Math.floor(a.pts.length / (W - L - R)));
+    const line = a.pts.filter((_, i) => i % step === 0).map(q => `${x(q.ms).toFixed(1)},${y(q.hr).toFixed(1)}`).join(' ');
+    const bands = a.sets.map(st => `<rect x="${x(st.start).toFixed(1)}" y="${T}" width="${Math.max(2, x(st.end) - x(st.start)).toFixed(1)}" height="${H - T - B}" fill="var(--accent)" opacity=".22" rx="2"/>`).join('');
+    const ticksY = [lo + 5, Math.round((lo + hi) / 2), hi - 5].map(v => `<text x="${L - 4}" y="${y(v) + 3}" text-anchor="end" font-size="10" fill="var(--dim)">${Math.round(v)}</text><line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--surface2)" stroke-width="1"/>`).join('');
+    const mins = (a.end - a.start) / 60000, every = mins > 60 ? 15 : mins > 25 ? 10 : 5;
+    let ticksX = '';
+    for (let m = 0; m <= mins; m += every) ticksX += `<text x="${x(a.start + m * 60000)}" y="${H - 5}" text-anchor="middle" font-size="10" fill="var(--dim)">${m}m</text>`;
+    const z2 = p.z2High > lo && p.z2High < hi
+      ? `<line x1="${L}" x2="${W - R}" y1="${y(p.z2High)}" y2="${y(p.z2High)}" stroke="var(--success)" stroke-dasharray="4 4" stroke-width="1" opacity=".7"/><text x="${W - R}" y="${y(p.z2High) - 3}" text-anchor="end" font-size="10" fill="var(--dim)">Zone 2 top</text>` : '';
+
+    let h = `<div style="background:var(--surface2);border-radius:10px;padding:10px;margin-bottom:10px">
+      <div class="text-sm" style="font-weight:700;margin-bottom:24px">Heart rate (bpm) ${a.sets.length ? '<span class="text-dim" style="font-weight:400">· shaded = sets</span>' : ''}</div>
+      <div style="position:relative">
+        <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;touch-action:pan-y" role="img" aria-label="Heart rate over the workout"
+          onmousemove="HrView.hover(event,${wi})" ontouchmove="HrView.hover(event,${wi})" onmouseleave="HrView.hover(null,${wi})">
+          ${ticksY}${bands}${z2}
+          <polyline points="${line}" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+          ${ticksX}
+          <line id="hrv-x-${wi}" y1="${T}" y2="${H - B}" stroke="var(--text)" stroke-width="1" opacity="0"/>
+          <circle id="hrv-dot-${wi}" r="4" fill="var(--primary)" stroke="var(--surface2)" stroke-width="2" opacity="0"/>
+        </svg>
+        <div id="hrv-tip-${wi}" style="position:absolute;top:-24px;pointer-events:none;background:var(--surface3);border-radius:6px;padding:3px 7px;font-size:.75rem;display:none;white-space:nowrap"></div>
+      </div>
+      <div class="text-sm mt-8">Avg ${a.avgAll} · peak ${a.peakAll}${a.avgSets ? ` · during sets ${a.avgSets}` : ''}${a.avgRest != null ? ` · avg rest ${fmtTime(a.avgRest)}` : ''}${a.avgDrop != null ? ` · avg drop ${a.avgDrop} bpm in first minute of rest` : ''}</div>
+    </div>`;
+
+    if (!a.sets.length) {
+      return h + '<div class="text-sm text-dim mb-8">No set timings for this workout. Sets timed with ▶ / ■ in the app will be broken out here.</div>';
+    }
+    h += `<table class="wk-table" style="margin:0 0 10px"><tr class="text-dim"><td>Set</td><td>Avg</td><td>Peak</td><td>Rest</td><td>Drop 60s</td></tr>`;
+    let lastEx = '';
+    a.sets.forEach(st => {
+      if (st.ex !== lastEx) { h += `<tr><td colspan="5" style="font-weight:700;padding-top:8px">${esc(st.ex)}</td></tr>`; lastEx = st.ex; }
+      h += `<tr><td>#${st.n}${st.weight ? ` · ${st.weight}×${st.reps}` : ''}</td><td>${st.avg ?? '–'}</td><td>${st.peak ?? '–'}</td><td>${st.rest != null ? fmtTime(st.rest) : '–'}</td><td>${st.drop60 != null ? '−' + st.drop60 : '–'}</td></tr>`;
+    });
+    return h + '</table>';
+  },
+
+  hover(evt, wi) {
+    const a = this.views[wi], tip = document.getElementById('hrv-tip-' + wi);
+    const xl = document.getElementById('hrv-x-' + wi), dot = document.getElementById('hrv-dot-' + wi);
+    if (!a || !tip) return;
+    if (!evt) { tip.style.display = 'none'; xl.setAttribute('opacity', 0); dot.setAttribute('opacity', 0); return; }
+    const svg = evt.currentTarget, box = svg.getBoundingClientRect();
+    const cx = (evt.touches ? evt.touches[0].clientX : evt.clientX) - box.left;
+    const { W, H, L, R, T, B } = this.G;
+    const vx = cx / box.width * W;
+    const ms = a.start + (vx - L) / (W - L - R) * (a.end - a.start);
+    let best = a.pts[0];
+    for (const q of a.pts) if (Math.abs(q.ms - ms) < Math.abs(best.ms - ms)) best = q;
+    const lo = Math.min(...a.pts.map(q => q.hr)) - 5, hi = Math.max(...a.pts.map(q => q.hr)) + 5;
+    const px = L + (best.ms - a.start) / Math.max(1, a.end - a.start) * (W - L - R);
+    const py = T + (hi - best.hr) / (hi - lo) * (H - T - B);
+    xl.setAttribute('x1', px); xl.setAttribute('x2', px); xl.setAttribute('opacity', .4);
+    dot.setAttribute('cx', px); dot.setAttribute('cy', py); dot.setAttribute('opacity', 1);
+    const st = a.sets.find(x => best.ms >= x.start && best.ms <= x.end);
+    const what = st ? `${st.ex} #${st.n}` : 'rest';
+    const minute = Math.floor((best.ms - a.start) / 60000);
+    tip.textContent = `${best.hr} bpm · ${minute}m · ${what}`;
+    tip.style.display = 'block';
+    const left = Math.min(Math.max(0, px / W * box.width - 70), box.width - 150);
+    tip.style.left = left + 'px';
+  },
+};
+
 // ===================== STRAVA =====================
 const Strava = {
   status: null,
@@ -1965,7 +2132,7 @@ const Strava = {
         };
         if (STRAVA_GYM.includes(a.sport)) {
           const g = gym.find(x => x.id === id);
-          const rec = { id, ...base, duration: Math.round(a.elapsed / 60) };
+          const rec = { id, ...base, duration: Math.round(a.elapsed / 60), startUtc: a.startUtc, elapsed: a.elapsed };
           if (g) Object.assign(g, rec); else { gym.push(rec); gymAdded++; }
           continue;
         }
@@ -2020,15 +2187,19 @@ const History = {
     const gym = Store.get('stravaGym', []);
     const reversed = [...workouts].reverse();
     reversed.slice(0, 50).forEach(w => {
+      const wi = workouts.indexOf(w);
       html += `<div class="card">
         <div class="row" style="justify-content:space-between">
           <span style="font-weight:700">Day ${w.dayLabel}: ${w.dayName}</span>
           <span class="text-dim text-sm">${w.date}</span>
         </div>
         <div class="text-sm text-dim mb-8">Week ${w.absWeek} &middot; ${w.duration} min ${w.completed ? '' : '(partial)'}${w.timer ? ` &middot; work ${Math.round(w.timer.totalWork/60)}m / rest ${Math.round(w.timer.totalRest/60)}m &middot; avg rest ${Math.floor(w.timer.avgRest/60)}:${String(w.timer.avgRest%60).padStart(2,'0')}${w.timer.restPeriods ? ` &middot; ${w.timer.restPeriods - w.timer.restOver}/${w.timer.restPeriods} rests on time` : ''}${w.timer.restOver ? ' &middot; <span style="color:var(--danger)">' + w.timer.restOver + ' over limit</span>' : ''}` : ''}</div>`;
-      const hrRec = gym.find(g => g.date === w.date);
+      const hrRec = HrView.match(w, gym);
       if (hrRec && hrRec.hr) {
-        html += `<div class="text-sm mb-8"><span class="chip chip-strava" style="margin:0 4px 0 0">Strava</span>HR avg ${hrRec.hr}${hrRec.maxHr ? ' · max ' + hrRec.maxHr : ''}</div>`;
+        const timed = (w.exercises || []).some(e => (e.sets || []).some(st => st.startedAt));
+        html += `<div class="row mb-8" style="justify-content:space-between"><span class="text-sm"><span class="chip chip-strava" style="margin:0 4px 0 0">Strava</span>HR avg ${hrRec.hr}${hrRec.maxHr ? ' · max ' + hrRec.maxHr : ''}</span>
+          ${hrRec.startUtc ? `<button class="btn btn-outline btn-xs" onclick="HrView.toggle(${wi})">${timed ? 'Set-by-set HR' : 'HR chart'}</button>` : ''}</div>
+          <div id="hrv-${wi}"></div>`;
       }
 
       if (w.exercises) {
