@@ -234,7 +234,7 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
 
 <!-- HISTORY PAGE -->
 <div id="page-history" class="page">
-  <div class="brand-header"><div class="brand-logo">PH3</div><div><h1>History</h1><div class="brand-sub">Past workouts</div></div></div>
+  <div class="brand-header"><div class="brand-logo">PH3</div><div><h1>Progress</h1><div class="brand-sub">PH3 schedule, lifts, history</div></div></div>
   <div id="history-content"></div>
 </div>
 
@@ -317,7 +317,7 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
   </button>
   <button onclick="Nav.go('history')" id="nav-history">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
-    History
+    Progress
   </button>
   <button onclick="Nav.go('settings')" id="nav-settings">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
@@ -734,6 +734,7 @@ const Timer = {
       // Wall-clock based: if the phone sleeps, the rest still counts.
       this.seconds = Math.floor((Date.now() - this.periodStart) / 1000);
       this.updateUI();
+      if (this.seconds % 15 === 0 && typeof Workout !== 'undefined') Workout.updateClock();
       if (this.state === 'resting') {
         const nudge = Store.get('profile', {}).nudge || 120;
         if (this.seconds >= nudge) {
@@ -890,15 +891,7 @@ const Home = {
         </div>`;
       }
 
-      html += `
-        <div class="card">
-          <div class="text-sm text-dim">Week ${absWeek} of 13</div>
-            <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
-          <div class="row" style="justify-content:space-between">
-            <span class="badge badge-blue">${blockDef.name}</span>
-            <span class="text-sm text-dim">${dayNum} / ${total} sessions</span>
-          </div>
-        </div>
+      html += Progress.summaryHtml(Progress.lastSummary()) + Schedule.homeCard(dayNum, absWeek, blockDef) + `
         <div class="card">
           <div class="text-sm text-dim mb-8">NEXT WORKOUT</div>
           <div style="font-size:1.2rem;font-weight:700;margin-bottom:12px">Day ${dayDef.label}: ${dayDef.name}</div>
@@ -915,12 +908,15 @@ const Home = {
           html += `<div class="row mb-8"><span style="flex:1">${label}</span><span style="font-weight:700">${w} lb</span><span class="text-dim" style="width:70px;text-align:right">${m.sets}×${m.reps}</span></div>`;
         });
       }
-      if (dayDef.acc.length > 0) {
-        html += `<div class="text-dim text-sm mt-8">+ ${dayDef.acc.length} accessories</div>`;
-      }
+      // Time available -> plan preview
+      const plan = Planner.build(dayNum, this.minutes);
+      html += `<div class="text-sm text-dim mt-8 mb-8">Time today</div>
+        <div class="row gap-8" style="flex-wrap:wrap">${Planner.CHOICES.map(m => `<button class="band-btn ${this.minutes === m ? 'active' : ''}" style="padding:6px 10px;font-size:.85rem" onclick="Home.setMinutes(${m})">${Planner.label(m)}</button>`).join('')}</div>
+        <div class="text-sm mt-8">${Planner.summary(plan)}</div>
+        <div class="text-sm text-dim mt-8">${this.minutes === -1 ? `As written: ~${plan.estMin} min` : `Plan ~${plan.estMin} min · as written ~${plan.fullMin} min`}</div>`;
 
       const canStart = !prog.blockMaxes || prog.blockMaxes[block] || block === 0;
-      html += `<button class="btn btn-success mt-16" ${canStart ? '' : 'disabled style="opacity:.4"'} onclick="Workout.start()">Start Workout</button>`;
+      html += `<button class="btn btn-success mt-16" ${canStart ? '' : 'disabled style="opacity:.4"'} onclick="Workout.start()">Start Workout (~${plan.estMin} min)</button>`;
 
       // Swap / defer button
       if (canStart && dayNum < total - 1 && prog.resumeDay == null) {
@@ -931,7 +927,8 @@ const Home = {
         } else {
           const nextInfo = getBlockAndWeek(dayNum + 1);
           const nextDay = BLOCKS[nextInfo.block].days[nextInfo.dayInWeek];
-          html += `<button class="btn btn-outline btn-sm mt-8" onclick="Home.swapNext()">Swap → do Day ${nextDay.label} (${nextDay.name}) first</button>`;
+          const np = Planner.build(dayNum + 1, this.minutes);
+          html += `<button class="btn btn-outline btn-sm mt-8" style="width:100%" onclick="Home.swapNext()">Swap → do Day ${nextDay.label} (${nextDay.name}) first<br><span class="text-dim" style="font-weight:400">${np.cut.length ? `~${np.estMin} min, cuts ${np.cut.length}` : `fits fully, ~${np.estMin} min`}</span></button>`;
         }
       }
 
@@ -972,6 +969,10 @@ const Home = {
     document.getElementById('home-content').innerHTML = html;
   },
 
+  // Time choice applies to the next session only; every day starts on "Program".
+  minutes: -1,
+  setMinutes(m) { this.minutes = m; this.render(); },
+
   swapNext() {
     const prog = Store.get('program', {});
     const dayNum = prog.currentDay || 0;
@@ -980,6 +981,291 @@ const Home = {
     Store.set('program', prog);
     this.render();
   }
+};
+
+// ===================== SESSION PLANNER =====================
+// Builds a workout to fit the time available. Priority: prescribed working
+// sets > two warm-ups per lift > kettlebell piece > other accessories >
+// third warm-up > extra working sets. Anything cut is kept (skipped) so it
+// can be added back with one tap.
+const Planner = {
+  CHOICES: [-1, 30, 45, 60, 75, 90, 0], // -1 = program as written (default), 0 = open-ended + extras
+  label(m) { return m === -1 ? 'Program' : m ? m + 'm' : 'Open'; },
+  secs() {
+    const nudge = (Store.get('profile', {}) || {}).nudge || 120;
+    return { main: 45 + nudge, warm: 90, acc: 35 + Math.round(nudge * 0.6), overhead: 300 };
+  },
+  // Learned pace: how long workouts really take vs the estimate (median of recent).
+  factor() {
+    const ws = Store.get('workouts', []).filter(w => w.plannedMin && w.duration && w.completed).slice(-6);
+    if (ws.length < 2) return 1;
+    const r = ws.map(w => w.duration / w.plannedMin).sort((a, b) => a - b)[Math.floor(ws.length / 2)];
+    return Math.min(1.5, Math.max(0.7, r));
+  },
+  WARMUPS: [{ p: 0.7, reps: 3 }, { p: 0.85, reps: 2 }, { p: 0.5, reps: 5 }], // first two are priority
+
+  build(dayNum, minutes, opts = {}) {
+    const { block, dayInWeek, absWeek } = getBlockAndWeek(dayNum);
+    const dayDef = BLOCKS[block].days[dayInWeek];
+    const amrap = isAmrapDay(dayNum) && !opts.lite;
+    const S = this.secs(), f = this.factor();
+    const asWritten = minutes === -1 || minutes == null;
+    const budget = minutes > 0 ? minutes * 60 / f : Infinity;
+    let used = S.overhead;
+    const fits = cost => used + cost <= budget;
+
+    // 1. Prescribed working sets: always in.
+    const mains = dayDef.main.map(m => {
+      let weight = m.pct ? calcWeight(m.lift, m.pct, block, absWeek, dayNum) : 0;
+      let n = m.sets;
+      if (opts.lite) { weight = roundTo5(weight * 0.8); if (n > 2) n--; }
+      used += n * S.main;
+      return { m, weight, n, warm: [], extra: 0 };
+    });
+    const warmFor = (x, w) => { const kg = Math.max(45, roundTo5(x.weight * w.p)); return kg < x.weight ? { weight: kg, reps: w.reps, p: w.p } : null; };
+    const addWarm = w => mains.forEach(x => {
+      if (!x.weight || dayDef.isTestDay) return;
+      const s = warmFor(x, w);
+      if (s && fits(S.warm)) { x.warm.push(s); used += S.warm; }
+    });
+    // 2. Two warm-ups per lift.
+    addWarm(this.WARMUPS[0]); addWarm(this.WARMUPS[1]);
+    // 3-4. Accessories: kettlebell piece first, then the rest in program order.
+    const accs = dayDef.acc.filter(a => !opts.lite || a.name.startsWith('KB '));
+    const order = [...accs.filter(a => a.name.startsWith('KB ')), ...accs.filter(a => !a.name.startsWith('KB '))];
+    const keep = new Set();
+    order.forEach(a => { const cost = a.sets * S.acc; if (fits(cost)) { keep.add(a); used += cost; } });
+    // 5. Third (lightest) warm-up.
+    addWarm(this.WARMUPS[2]);
+    // 6. Extra working sets, round-robin, up to +2 per lift.
+    if (!opts.lite && !asWritten) for (let r = 0; r < 2; r++) mains.forEach(x => { if (x.weight && fits(S.main)) { x.extra++; used += S.main; } });
+
+    // Assemble
+    const exercises = [];
+    mains.forEach(x => {
+      const sets = [];
+      x.warm.sort((a, b) => a.p - b.p).forEach(w => sets.push({ goalWeight: w.weight, goalReps: w.reps, actualWeight: w.weight, actualReps: w.reps, isWarmup: true, isAmrap: false, done: false }));
+      for (let i = 0; i < x.n; i++) sets.push({ goalWeight: x.weight, goalReps: x.m.reps, actualWeight: x.weight, actualReps: x.m.reps, isAmrap: amrap && i === x.n - 1, done: false });
+      for (let i = 0; i < x.extra; i++) sets.push({ goalWeight: x.weight, goalReps: x.m.reps, actualWeight: x.weight, actualReps: x.m.reps, isExtra: true, isAmrap: false, done: false });
+      exercises.push({ name: liftName(x.m.lift), lift: x.m.lift, isMain: true, pct: x.m.pct, note: x.m.note || null, sets, skipped: false });
+    });
+    accs.forEach(a => {
+      const w = a.defaultWeight || 0, sets = [];
+      for (let i = 0; i < a.sets; i++) sets.push({ goalWeight: w, goalReps: a.reps, actualWeight: w, actualReps: a.reps, isAmrap: false, done: false });
+      const cut = !keep.has(a);
+      exercises.push({ name: a.name, lift: null, isMain: false, rir: a.rir, sets, skipped: cut, cutForTime: cut });
+    });
+
+    const fullSec = S.overhead + mains.reduce((t, x) => t + x.n * S.main + (x.weight && !dayDef.isTestDay ? 3 * S.warm : 0), 0) + accs.reduce((t, a) => t + a.sets * S.acc, 0);
+    return {
+      dayDef, block, absWeek, amrap, exercises, mains,
+      cut: accs.filter(a => !keep.has(a)).map(a => a.name),
+      kept: order.filter(a => keep.has(a)).map(a => a.name),
+      estMin: Math.round(used * f / 60), fullMin: Math.round(fullSec * f / 60),
+    };
+  },
+
+  summary(plan) {
+    const parts = [];
+    const w = plan.mains.length ? Math.min(...plan.mains.map(x => x.warm.length)) : 0;
+    const wMax = plan.mains.length ? Math.max(...plan.mains.map(x => x.warm.length)) : 0;
+    if (plan.mains.length && plan.mains.some(x => x.weight)) parts.push(`${w === wMax ? w : w + '–' + wMax} warm-up${wMax === 1 ? '' : 's'} per lift`);
+    const ex = plan.mains.reduce((t, x) => t + x.extra, 0);
+    if (ex) parts.push(`+${ex} extra working set${ex === 1 ? '' : 's'}`);
+    if (plan.kept.length) parts.push(plan.kept.join(', '));
+    return parts.join(' · ') + (plan.cut.length ? `<br><span style="color:var(--warning)">Cut for time: ${plan.cut.join(', ')}</span>` : '');
+  },
+};
+
+// ===================== PH3 SCHEDULE =====================
+// 13 calendar weeks, 4 sessions a week, starting on a Monday. Week N of the
+// program is a fixed date range; sessions inside a week are flexible.
+const Schedule = {
+  WEEKLY: 4,
+  start() {
+    const prog = Store.get('program', {}) || {};
+    if (prog.schedStart) return prog.schedStart;
+    const s = prog.startDate || localDate();
+    const dow = (parseLocal(s).getDay() + 6) % 7; // 0 = Monday
+    return dow <= 2 ? weekStart(s) : addDays(weekStart(s), 7); // Thu-Sun setup -> next Monday
+  },
+  end() { return addDays(this.start(), 13 * 7 - 1); },
+  weekRange(n) { const a = addDays(this.start(), 7 * (n - 1)); return [a, addDays(a, 6)]; },
+  calendarWeek() { const d = daysSince(this.start()); return d < 0 ? 0 : Math.floor(d / 7) + 1; },
+  blockRanges() {
+    let w = 1;
+    return BLOCKS.map(b => { const r = { name: b.name, from: w, to: w + b.weeks - 1 }; w += b.weeks; return r; });
+  },
+  fmt(d) { return parseLocal(d).toLocaleDateString([], { month: 'short', day: 'numeric' }); },
+  // Sessions done vs where the calendar says you should be by end of this week.
+  status() {
+    const prog = Store.get('program', {}) || {};
+    const done = prog.currentDay || 0;
+    const cw = Math.max(0, Math.min(13, this.calendarWeek()));
+    if (daysSince(this.start()) < 0) return { done, cw: 0, text: `Starts ${this.fmt(this.start())}`, tone: 'dim' };
+    const dueByEndOfWeek = Math.min(totalDays(), cw * this.WEEKLY);
+    const dueByLastWeek = Math.min(totalDays(), (cw - 1) * this.WEEKLY);
+    const left = dueByEndOfWeek - done;
+    if (done >= dueByEndOfWeek) return { done, cw, text: 'On schedule' + (done > dueByEndOfWeek ? ` (${done - dueByEndOfWeek} ahead)` : ''), tone: 'good' };
+    if (done >= dueByLastWeek) return { done, cw, text: `On schedule · ${left} session${left === 1 ? '' : 's'} left this week`, tone: 'good' };
+    const behind = dueByLastWeek - done;
+    const weeksLeft = 13 - cw + 1;
+    const projected = addDays(this.end(), Math.ceil(behind / this.WEEKLY) * 7);
+    return { done, cw, text: `${behind} session${behind === 1 ? '' : 's'} behind · ${left} to catch up this week (${weeksLeft} weeks left) · at this pace ends ~${this.fmt(projected)}`, tone: 'warn' };
+  },
+  homeCard(dayNum, absWeek, blockDef) {
+    const st = this.status(), [a, b] = this.weekRange(absWeek);
+    const br = this.blockRanges().find(r => r.name === blockDef.name);
+    const color = st.tone === 'good' ? 'var(--success)' : st.tone === 'warn' ? 'var(--warning)' : 'var(--dim)';
+    const cw = st.cw;
+    return `<div class="card" onclick="Nav.go('history')" style="cursor:pointer">
+      <div class="row" style="justify-content:space-between"><span class="text-sm text-dim">Program week ${absWeek} of 13 · ${this.fmt(a)}–${this.fmt(b)}</span><span class="text-sm text-dim">${dayNum} / ${totalDays()}</span></div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${Math.round(100 * dayNum / totalDays())}%"></div></div>
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <span class="badge badge-blue">${blockDef.name}</span>
+        <span class="text-sm text-dim">${br ? `weeks ${br.from}–${br.to}, ends ${this.fmt(this.weekRange(br.to)[1])}` : ''}</span>
+      </div>
+      <div class="text-sm mt-8" style="color:${color}">${cw && cw !== absWeek && st.tone !== 'dim' ? `Calendar week ${cw} · ` : ''}${st.text}</div>
+      <div class="text-sm text-dim">Program: ${this.fmt(this.start())} → ${this.fmt(this.end())}</div>
+    </div>`;
+  },
+};
+
+// ===================== PROGRESS =====================
+const Progress = {
+  e1rm(w, r) { return typeof r === 'number' && r > 0 && w > 0 ? Math.round(w * (1 + Math.min(r, 12) / 30)) : 0; },
+  // Best working set (not warm-up) per lift per workout.
+  liftSeries(lift) {
+    return Store.get('workouts', []).map(w => {
+      const ex = (w.exercises || []).find(e => e.lift === lift);
+      if (!ex) return null;
+      let best = null;
+      ex.sets.filter(s => !s.isWarmup).forEach(s => { const e = this.e1rm(s.actualWeight, s.actualReps); if (e && (!best || e > best.e)) best = { e, w: s.actualWeight, r: s.actualReps }; });
+      return best ? { date: w.date, ...best, sets: ex.sets.filter(s => !s.isWarmup).length } : null;
+    }).filter(Boolean);
+  },
+  render() {
+    const prog = Store.get('program', {}) || {};
+    const workouts = Store.get('workouts', []);
+    const st = Schedule.status();
+    // 13-week grid: sessions done in each program week
+    const perWeek = Array(14).fill(0);
+    workouts.forEach(w => { if (w.absWeek) perWeek[w.absWeek]++; });
+    const cw = st.cw;
+    let grid = '<div style="display:grid;grid-template-columns:repeat(13,1fr);gap:3px;margin-top:8px">';
+    for (let n = 1; n <= 13; n++) {
+      const c = perWeek[n], full = c >= Schedule.WEEKLY;
+      const bg = full ? 'var(--success)' : c ? 'var(--primary)' : 'var(--surface2)';
+      grid += `<div title="Week ${n}: ${c}/4" style="height:34px;border-radius:5px;background:${bg};opacity:${c || n === cw ? 1 : .6};${n === cw ? 'outline:2px solid var(--warning);outline-offset:1px;' : ''}display:flex;align-items:flex-end;justify-content:center;font-size:.6rem;color:${full ? '#000' : 'var(--text)'}">${c || ''}</div>`;
+    }
+    grid += '</div><div class="row text-sm text-dim" style="justify-content:space-between;margin-top:4px">' +
+      Schedule.blockRanges().map(r => `<span>${r.name.slice(0, 5)} ${r.from}${r.to !== r.from ? '–' + r.to : ''}</span>`).join('') + '</div>';
+
+    let lifts = '<table class="wk-table"><tr class="text-dim"><td>Lift</td><td>Working max</td><td>Best e1RM</td><td>Latest</td></tr>';
+    ['squat', 'bench', 'deadlift'].forEach(l => {
+      const s = this.liftSeries(l);
+      const best = s.reduce((m, x) => x.e > m.e ? x : m, { e: 0 });
+      const first = s[0], last = s[s.length - 1];
+      const maxNow = getMaxes(getBlockAndWeek(prog.currentDay || 0).block)[l];
+      lifts += `<tr><td>${liftName(l)}</td><td>${maxNow}</td><td>${best.e ? best.e + (first && best.e > first.e ? ` <span style="color:var(--success)">+${best.e - first.e}</span>` : '') : '–'}</td><td>${last ? `${last.w}×${last.r}${last.sets > 1 ? ` (${last.sets} sets)` : ''}` : '–'}</td></tr>`;
+    });
+    lifts += '</table><div class="text-sm text-dim mt-8">e1RM = estimated 1-rep max from your best working set (Epley).</div>';
+
+    const color = st.tone === 'good' ? 'var(--success)' : st.tone === 'warn' ? 'var(--warning)' : 'var(--dim)';
+    return `<div class="card">
+        <div class="card-title">PH3 progress</div>
+        <div class="text-sm">${Schedule.fmt(Schedule.start())} → ${Schedule.fmt(Schedule.end())} · session ${prog.currentDay || 0} of ${totalDays()}</div>
+        <div class="text-sm" style="color:${color}">${st.text}</div>
+        ${grid}
+      </div>
+      <div class="card"><div class="card-title">Lifts</div>${lifts}</div>
+      <div class="card"><div class="card-title">This week</div>${Cardio.weekCard(true)}</div>
+      <h2 class="mt-16">Workout history</h2>`;
+  },
+
+  // Card shown on Home right after finishing (or auto-ending) a workout.
+  summaryHtml(s) {
+    if (!s) return '';
+    const lines = s.lifts.map(l => `<div class="text-sm">${esc(l.name)}: ${l.sets}${l.extra ? ` <span style="color:var(--success)">(+${l.extra} extra)</span>` : ''}${l.pr ? ' <span class="chip chip-z2">best e1RM ' + l.e + '</span>' : ''}</div>`).join('');
+    return `<div class="card" style="border-left:4px solid var(--success)">
+      <div class="row" style="justify-content:space-between"><div class="card-title" style="margin:0">${s.auto ? 'Workout auto-ended' : 'Workout done'}</div><button class="skip-btn" onclick="Progress.dismiss()">✕</button></div>
+      ${s.auto ? `<div class="text-sm" style="color:var(--warning)">${esc(s.auto)}</div>` : ''}
+      <div class="text-sm text-dim mb-8">Day ${s.dayLabel} · ${s.duration} min${s.plannedMin ? ` (planned ~${s.plannedMin})` : ''} · session ${s.session} of ${totalDays()}</div>
+      ${lines}
+      ${s.rest ? `<div class="text-sm mt-8">Rests on time: ${s.rest}</div>` : ''}
+      <div class="text-sm mt-8" style="color:${s.tone === 'warn' ? 'var(--warning)' : 'var(--success)'}">${esc(s.schedule)}</div>
+      <div class="text-sm text-dim">This week: lifts ${s.week.lifts}/${s.week.liftGoal} · Zone 2 ${s.week.z2}/${s.week.z2Goal} min · hard ${s.week.hard}/${s.week.hardGoal}</div>
+    </div>`;
+  },
+  makeSummary(record, auto) {
+    const prev = Store.get('workouts', []).slice(0, -1);
+    const lifts = (record.exercises || []).filter(e => e.isMain && e.sets.length).map(e => {
+      const work = e.sets.filter(s => !s.isWarmup);
+      const best = Math.max(0, ...work.map(s => this.e1rm(s.actualWeight, s.actualReps)));
+      const prevBest = Math.max(0, ...prev.flatMap(w => (w.exercises || []).filter(x => x.lift === e.lift).flatMap(x => x.sets.filter(s => !s.isWarmup).map(s => this.e1rm(s.actualWeight, s.actualReps)))));
+      return { name: e.name, sets: work.map(s => `${s.actualWeight}×${s.actualReps}`).join(', '), extra: work.filter(s => s.isExtra).length, e: best, pr: best > prevBest && prevBest > 0 };
+    });
+    const t = record.timer || {};
+    const ws = Cardio.weekStats(weekStart(localDate())), p = Cardio.prefs(weekStart(localDate()));
+    const st = Schedule.status();
+    return {
+      auto, dayLabel: record.dayLabel, duration: record.duration, plannedMin: record.plannedMin, session: (Store.get('program', {}) || {}).currentDay || 0,
+      lifts, rest: t.restPeriods ? `${t.restPeriods - t.restOver} of ${t.restPeriods} (avg ${fmtTime(t.avgRest)})` : '',
+      schedule: st.text, tone: st.tone,
+      week: { lifts: ws.lifts, liftGoal: p.liftGoal, z2: ws.z2, z2Goal: p.z2Goal, hard: ws.hard, hardGoal: p.hardGoal },
+    };
+  },
+  dismiss() { try { localStorage.removeItem('ph3__summary'); } catch {} Home.render(); },
+  saveSummary(s) { try { localStorage.setItem('ph3__summary', JSON.stringify(s)); } catch {} },
+  lastSummary() { try { return JSON.parse(localStorage.getItem('ph3__summary')); } catch { return null; } },
+};
+
+// ===================== FORGOTTEN-WORKOUT GUARD =====================
+// 45 min with no set activity -> "Still working out?" banner; no answer in
+// 5 min -> finish it. If the app was closed the whole time, finish on next
+// open, timed to the last activity. Hard cap: 4 hours.
+const Guard = {
+  IDLE_MIN: 45, GRACE_MIN: 5, CAP_MIN: 240,
+  promptAt: null, timer: null,
+  idleMs(d) { return Date.now() - (d.lastActivity || d.startTime); },
+  check(onOpen) {
+    const d = Workout.data;
+    if (!d) { this.hide(); return; }
+    if (Workout.activeSet) return; // mid-set: clearly still going
+    const idle = this.idleMs(d), total = Date.now() - d.startTime;
+    const lastAt = new Date(d.lastActivity || d.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    if (total > this.CAP_MIN * 60000) return this.autoEnd(`Open for over 4 hours, so it was ended at your last activity (${lastAt}).`);
+    if (onOpen && idle > (this.IDLE_MIN + this.GRACE_MIN) * 60000) return this.autoEnd(`No activity since ${lastAt}, so it was ended then.`);
+    if (idle > this.IDLE_MIN * 60000) {
+      if (!this.promptAt) this.promptAt = Date.now();
+      if (Date.now() - this.promptAt > this.GRACE_MIN * 60000) return this.autoEnd(`No answer to "still working out?", so it was ended at your last activity (${lastAt}).`);
+      this.show();
+    } else this.hide();
+  },
+  show() {
+    let el = document.getElementById('guard-banner');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'guard-banner';
+      el.style.cssText = 'position:fixed;left:12px;right:12px;bottom:76px;z-index:400;background:var(--warning);color:#000;border-radius:12px;padding:12px;box-shadow:0 4px 20px rgba(0,0,0,.5)';
+      document.body.appendChild(el);
+    }
+    const left = Math.max(0, Math.ceil((this.GRACE_MIN * 60000 - (Date.now() - this.promptAt)) / 1000));
+    el.innerHTML = `<div style="font-weight:700">Still working out?</div>
+      <div class="text-sm">Nothing logged for ${this.IDLE_MIN}+ min. Finishing automatically in ${fmtTime(left)}.</div>
+      <div class="row gap-8 mt-8"><button class="btn btn-sm" style="background:#000;color:#fff;flex:1" onclick="Guard.stillGoing()">Still going</button>
+      <button class="btn btn-sm" style="background:#fff;color:#000;flex:1" onclick="Guard.hide();Workout.finish()">Finish now</button></div>`;
+    try { navigator.vibrate([300, 200, 300]); } catch {}
+  },
+  hide() { this.promptAt = null; const el = document.getElementById('guard-banner'); if (el) el.remove(); },
+  stillGoing() { this.hide(); Workout.save(); },
+  autoEnd(reason) {
+    this.hide();
+    const d = Workout.data;
+    if (!d) return;
+    Workout.saveAndExit(true, { endAt: (d.lastActivity || d.startTime) + 2 * 60000, auto: reason });
+  },
+  startWatching() { clearInterval(this.timer); this.timer = setInterval(() => this.check(false), 30000); },
 };
 
 // ===================== WORKOUT =====================
@@ -994,67 +1280,10 @@ const Workout = {
     const dayDef = blockDef.days[dayInWeek];
     const amrap = isAmrapDay(dayNum);
 
-    const exercises = [];
-
-    // Main lifts
-    dayDef.main.forEach(m => {
-      const weight = m.pct ? calcWeight(m.lift, m.pct, block, absWeek, dayNum) : 0;
-      const sets = [];
-      for (let i = 0; i < m.sets; i++) {
-        const isLastSet = i === m.sets - 1;
-        sets.push({
-          goalWeight: weight,
-          goalReps: m.reps,
-          actualWeight: weight,
-          actualReps: m.reps,
-          isAmrap: amrap && isLastSet,
-          done: false,
-        });
-      }
-      exercises.push({
-        name: liftName(m.lift),
-        lift: m.lift,
-        isMain: true,
-        pct: m.pct,
-        note: m.note || null,
-        sets,
-        skipped: false,
-      });
-    });
-
-    // Lift-lite (bad night): main lifts at 80%, one fewer set, accessories cut
-    // except the kettlebell piece.
-    if (opts.lite) {
-      exercises.forEach(ex => {
-        if (ex.sets.length > 2) ex.sets.pop();
-        ex.sets.forEach(st => { st.goalWeight = st.actualWeight = roundTo5(st.goalWeight * 0.8); st.isAmrap = false; });
-      });
-    }
-
-    // Accessories
-    dayDef.acc.forEach(a => {
-      if (opts.lite && !a.name.startsWith('KB ')) return;
-      const w = a.defaultWeight || 0;
-      const sets = [];
-      for (let i = 0; i < a.sets; i++) {
-        sets.push({
-          goalWeight: w,
-          goalReps: a.reps,
-          actualWeight: w,
-          actualReps: a.reps,
-          isAmrap: false,
-          done: false,
-        });
-      }
-      exercises.push({
-        name: a.name,
-        lift: null,
-        isMain: false,
-        rir: a.rir,
-        sets,
-        skipped: false,
-      });
-    });
+    const minutes = opts.minutes !== undefined ? opts.minutes : Home.minutes;
+    const plan = Planner.build(dayNum, minutes, opts);
+    const exercises = plan.exercises;
+    Home.minutes = -1; // back to "Program" for next time
 
     this.data = {
       dayNum,
@@ -1064,6 +1293,8 @@ const Workout = {
       dayName: dayDef.name,
       isTestDay: dayDef.isTestDay || false,
       lite: !!opts.lite,
+      minutes: minutes || 0,
+      plannedMin: plan.estMin,
       exercises,
       startTime: Date.now(),
     };
@@ -1071,7 +1302,7 @@ const Workout = {
     // Load previous accessory weights from history
     this.loadPreviousWeights();
 
-    Store.set('activeWorkout', this.data);
+    this.save();
     Timer.reset();
     Timer.show();
     Timer.updateUI();
@@ -1080,6 +1311,7 @@ const Workout = {
     document.getElementById('page-workout').classList.add('active');
     document.querySelectorAll('#nav button').forEach(b => b.classList.remove('active'));
     this.render();
+    Guard.startWatching();
   },
 
   loadPreviousWeights() {
@@ -1118,6 +1350,7 @@ const Workout = {
           <span class="text-sm">Wk ${d.absWeek} Day ${d.dayLabel}${rampFactor(d.absWeek, d.dayNum) < 1 ? ` · easing ${Math.round(rampFactor(d.absWeek, d.dayNum) * 100)}%` : ''}</span>
         </div>
         <div style="font-weight:700;margin-top:4px">${d.dayName}${d.lite ? ' <span class="badge badge-amber">Lift-lite</span>' : ''}</div>
+        <div class="text-sm text-dim" id="wo-clock"></div>
       </div>
       <div style="padding-top:12px">`;
 
@@ -1140,7 +1373,7 @@ const Workout = {
         </div>
         <div class="ex-body">`;
 
-      if (ex.isMain) {
+      if (ex.isMain && !ex.sets.some(s => s.isWarmup)) {
         html += `<div class="text-dim text-sm mb-8" style="font-style:italic">Warm up to working weight</div>`;
       }
 
@@ -1158,12 +1391,14 @@ const Workout = {
         </div>`;
       }
 
+      let nW = 0, nS = 0, nX = 0;
       ex.sets.forEach((s, si) => {
         const done = s.done;
+        const lbl = s.isWarmup ? `W${++nW}` : s.isExtra ? `+${++nX}` : `S${++nS}`;
         html += `<div class="set-row">
           <div class="set-label" style="display:flex;align-items:center;gap:2px">
             ${ex.sets.length > 1 ? `<button style="font-size:.6rem;color:var(--dim);background:none;border:none;cursor:pointer;padding:0;line-height:1" onclick="Workout.deleteSet(${ei},${si})">✕</button>` : ''}
-            ${s.isAmrap ? `<span class="amrap-badge">AMRAP</span>` : `<span>S${si + 1}</span>`}
+            ${s.isAmrap ? `<span class="amrap-badge">AMRAP</span>` : `<span style="${s.isWarmup ? 'color:var(--dim)' : s.isExtra ? 'color:var(--success)' : ''}">${lbl}</span>`}
           </div>
           <div class="set-goal">${s.goalWeight > 0 ? s.goalWeight + ' × ' + s.goalReps : s.goalReps + ' reps'}</div>
           <div class="set-actual">
@@ -1198,16 +1433,54 @@ const Workout = {
       html += `</div></div>`;
     });
 
+    // Skipped / cut-for-time exercises: one tap to add back
+    const skipped = d.exercises.map((e, i) => ({ e, i })).filter(x => x.e.skipped);
+    if (skipped.length) {
+      html += `<div class="card"><div class="text-sm text-dim mb-8">Not in today's plan (tap to add back)</div>
+        <div class="row gap-8" style="flex-wrap:wrap">${skipped.map(x => `<button class="band-btn" onclick="Workout.unskip(${x.i})">+ ${esc(x.e.name)}</button>`).join('')}</div></div>`;
+    }
+
     // Add custom exercise button
     html += `<button class="btn btn-outline btn-sm mt-8 mb-16" onclick="Workout.addCustom()">+ Add Exercise</button>`;
 
     // Finish button
-    const allMainDone = d.exercises.filter(e => e.isMain).every(e => e.sets.every(s => s.done) || e.skipped);
+    const allMainDone = d.exercises.filter(e => e.isMain).every(e => e.sets.filter(s => !s.isWarmup && !s.isExtra).every(s => s.done) || e.skipped);
     html += `<button class="btn ${allMainDone ? 'btn-success' : 'btn-outline'}" onclick="Workout.finish()" style="margin-bottom:24px">
       ${allMainDone ? 'Finish Workout' : 'Finish Early'}
     </button></div>`;
 
     document.getElementById('workout-content').innerHTML = html;
+    this.updateClock();
+  },
+
+  // Time used vs budget, and estimated finish from the remaining sets.
+  updateClock() {
+    const el = document.getElementById('wo-clock');
+    if (!el || !this.data) return;
+    const d = this.data, S = Planner.secs(), f = Planner.factor();
+    const elapsed = Math.round((Date.now() - d.startTime) / 60000);
+    let rem = 0;
+    d.exercises.forEach(ex => { if (!ex.skipped) ex.sets.forEach(s => { if (!s.done) rem += s.isWarmup ? S.warm : ex.isMain ? S.main : S.acc; }); });
+    const remMin = Math.round(rem * f / 60);
+    const at = new Date(Date.now() + rem * f * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    if (!d.minutes) { el.innerHTML = `${elapsed} min in · ~${remMin} min left · done ~${at}`; return; }
+    const over = elapsed + remMin - d.minutes;
+    el.innerHTML = `${elapsed} of ${d.minutes} min · done ~${at}` + (over > 3 ? ` · <span style="color:var(--warning)">~${over} min over</span>` : '');
+  },
+
+  // Every change goes through here so the forgotten-workout guard knows you're active.
+  save() {
+    if (!this.data) return;
+    this.data.lastActivity = Date.now();
+    Guard.hide();
+    Store.set('activeWorkout', this.data);
+  },
+
+  unskip(ei) {
+    const ex = this.data.exercises[ei];
+    ex.skipped = false; ex.cutForTime = false;
+    this.save();
+    this.render();
   },
 
   adjWeight(ei, si, delta) {
@@ -1218,7 +1491,7 @@ const Workout = {
         this.data.exercises[ei].sets[i].actualWeight = this.data.exercises[ei].sets[si].actualWeight;
       }
     }
-    Store.set('activeWorkout', this.data);
+    this.save();
     this.render();
   },
 
@@ -1226,18 +1499,18 @@ const Workout = {
     const s = this.data.exercises[ei].sets[si];
     const cur = typeof s.actualReps === 'number' ? s.actualReps : 0;
     s.actualReps = Math.max(0, cur + delta);
-    Store.set('activeWorkout', this.data);
+    this.save();
     this.render();
   },
 
   setWeight(ei, si, val) {
     this.data.exercises[ei].sets[si].actualWeight = parseInt(val) || 0;
-    Store.set('activeWorkout', this.data);
+    this.save();
   },
 
   setReps(ei, si, val) {
     this.data.exercises[ei].sets[si].actualReps = parseInt(val) || val;
-    Store.set('activeWorkout', this.data);
+    this.save();
   },
 
   activeSet: null,  // { ei, si, startTime, countdownInterval, tutInterval }
@@ -1298,7 +1571,7 @@ const Workout = {
     this.clearActiveTimers();
     this.activeSet = null;
     Timer.start('resting');
-    Store.set('activeWorkout', this.data);
+    this.save();
     this.render();
   },
 
@@ -1306,7 +1579,7 @@ const Workout = {
     const s = this.data.exercises[ei].sets[si];
     s.done = false;
     s.tut = 0;
-    Store.set('activeWorkout', this.data);
+    this.save();
     this.render();
   },
 
@@ -1359,13 +1632,13 @@ const Workout = {
     s.tut = Math.round(avgSecPerRep * reps);
     s.done = true;
     Timer.start('resting');
-    Store.set('activeWorkout', this.data);
+    this.save();
     this.render();
   },
 
   setBand(ei, band) {
     this.data.exercises[ei].band = band;
-    Store.set('activeWorkout', this.data);
+    this.save();
     this.render();
   },
 
@@ -1378,9 +1651,11 @@ const Workout = {
       actualWeight: last.actualWeight,
       actualReps: last.actualReps,
       isAmrap: false,
+      isExtra: !last.isWarmup || ex.sets.some(x => !x.isWarmup),
+      isWarmup: false,
       done: false,
     });
-    Store.set('activeWorkout', this.data);
+    this.save();
     this.render();
   },
 
@@ -1392,13 +1667,13 @@ const Workout = {
       this.activeSet = null;
     }
     ex.sets.splice(si, 1);
-    Store.set('activeWorkout', this.data);
+    this.save();
     this.render();
   },
 
   skipExercise(ei) {
     this.data.exercises[ei].skipped = true;
-    Store.set('activeWorkout', this.data);
+    this.save();
     this.render();
   },
 
@@ -1440,7 +1715,7 @@ const Workout = {
       }
     }
     this.data.exercises.push(ex);
-    Store.set('activeWorkout', this.data);
+    this.save();
     this.render();
   },
 
@@ -1454,9 +1729,10 @@ const Workout = {
     this.saveAndExit(true);
   },
 
-  saveAndExit(completed) {
+  saveAndExit(completed, opts = {}) {
     const d = this.data;
-    const duration = Math.round((Date.now() - d.startTime) / 60000);
+    const endAt = opts.endAt ? Math.min(opts.endAt, Date.now()) : Date.now();
+    const duration = Math.max(1, Math.round((endAt - d.startTime) / 60000));
 
     // Capture timer stats before stopping
     const timerSummary = Timer.getSummary();
@@ -1465,7 +1741,8 @@ const Workout = {
     const record = {
       date: localDate(),
       startedAt: d.startTime,
-      endedAt: Date.now(),
+      endedAt: endAt,
+      autoEnded: opts.auto || null,
       dayNum: d.dayNum,
       block: d.block,
       absWeek: d.absWeek,
@@ -1475,6 +1752,8 @@ const Workout = {
       completed,
       lite: !!d.lite,
       timer: timerSummary,
+      minutes: d.minutes || 0,
+      plannedMin: d.plannedMin || 0,
       bodyweight: Store.get('profile', {}).bodyweight || 0,
       exercises: d.exercises.filter(e => !e.skipped).map(e => ({
         name: e.name,
@@ -1490,6 +1769,8 @@ const Workout = {
           startedAt: s.startedAt || null,
           endedAt: s.endedAt || null,
           isAmrap: s.isAmrap,
+          isWarmup: !!s.isWarmup,
+          isExtra: !!s.isExtra,
         }))
       }))
     };
@@ -1521,10 +1802,9 @@ const Workout = {
 
     Timer.stop();
     Nav.go('home');
-    if (timerSummary.restPeriods) {
-      const t = timerSummary;
-      alert(`Rest discipline: ${t.restPeriods - t.restOver} of ${t.restPeriods} rests under ${fmtTime(t.limit)} (${t.onTimePct}%).\nAverage ${fmtTime(t.avgRest)}, longest ${fmtTime(t.maxRest)}.`);
-    }
+    Guard.hide();
+    Progress.saveSummary(Progress.makeSummary(record, opts.auto));
+    Home.render();
   }
 };
 
@@ -1641,12 +1921,12 @@ const Cardio = {
     const profile = Store.get('profile', {}) || {};
     const c = profile.cardio || {};
     const plan = ws && (profile.weekPlans || {})[ws];
-    const base = { maxHr: c.maxHr || 185, z2Low: c.z2Low || 111, z2High: c.z2High || 130, z2Goal: c.z2Goal || 120, hardGoal: c.hardGoal || 2, liftGoal: c.liftGoal || 3 };
+    const base = { maxHr: c.maxHr || 185, z2Low: c.z2Low || 111, z2High: c.z2High || 130, z2Goal: c.z2Goal || 120, hardGoal: c.hardGoal || 2, liftGoal: c.liftGoal || 4 };
     return plan ? { ...base, z2Goal: plan.z2Goal, hardGoal: plan.hardGoal, liftGoal: plan.liftGoal, planName: plan.name } : base;
   },
   prefsBase() {
     const c = (Store.get('profile', {}) || {}).cardio || {};
-    return { maxHr: c.maxHr || 185, z2Low: c.z2Low || 111, z2High: c.z2High || 130, z2Goal: c.z2Goal || 120, hardGoal: c.hardGoal || 2, liftGoal: c.liftGoal || 3 };
+    return { maxHr: c.maxHr || 185, z2Low: c.z2Low || 111, z2High: c.z2High || 130, z2Goal: c.z2Goal || 120, hardGoal: c.hardGoal || 2, liftGoal: c.liftGoal || 4 };
   },
   list() { return Store.get('cardio', []).filter(c => !c.deleted); },
   typeOf(c) { return CARDIO_TYPES[c.type] || { label: c.type || 'Other' }; },
@@ -2077,7 +2357,7 @@ const HrView = {
     };
     const sets = [];
     (w.exercises || []).forEach(ex => (ex.sets || []).forEach((st, i) => {
-      if (st.startedAt && st.endedAt) sets.push({ ex: ex.name, n: i + 1, start: st.startedAt, end: st.endedAt, weight: st.actualWeight, reps: st.actualReps });
+      if (st.startedAt && st.endedAt) sets.push({ ex: ex.name, n: i + 1, lbl: st.isWarmup ? 'W' : st.isExtra ? '+' : '#', start: st.startedAt, end: st.endedAt, weight: st.actualWeight, reps: st.actualReps });
     }));
     sets.sort((a, b) => a.start - b.start);
     sets.forEach((st, i) => {
@@ -2149,7 +2429,7 @@ const HrView = {
     let lastEx = '';
     a.sets.forEach(st => {
       if (st.ex !== lastEx) { h += `<tr><td colspan="5" style="font-weight:700;padding-top:8px">${esc(st.ex)}</td></tr>`; lastEx = st.ex; }
-      h += `<tr><td>#${st.n}${st.weight ? ` · ${st.weight}×${st.reps}` : ''}</td><td>${st.avg ?? '–'}</td><td>${st.peak ?? '–'}</td><td>${st.rest != null ? fmtTime(st.rest) : '–'}</td><td>${st.drop60 != null ? '−' + st.drop60 : '–'}</td></tr>`;
+      h += `<tr><td>${st.lbl || '#'}${st.n}${st.weight ? ` · ${st.weight}×${st.reps}` : ''}</td><td>${st.avg ?? '–'}</td><td>${st.peak ?? '–'}</td><td>${st.rest != null ? fmtTime(st.rest) : '–'}</td><td>${st.drop60 != null ? '−' + st.drop60 : '–'}</td></tr>`;
     });
     return h + '</table>';
   },
@@ -2172,7 +2452,7 @@ const HrView = {
     xl.setAttribute('x1', px); xl.setAttribute('x2', px); xl.setAttribute('opacity', .4);
     dot.setAttribute('cx', px); dot.setAttribute('cy', py); dot.setAttribute('opacity', 1);
     const st = a.sets.find(x => best.ms >= x.start && best.ms <= x.end);
-    const what = st ? `${st.ex} #${st.n}` : 'rest';
+    const what = st ? `${st.ex} ${st.lbl || '#'}${st.n}` : 'rest';
     const minute = Math.floor((best.ms - a.start) / 60000);
     tip.textContent = `${best.hr} bpm · ${minute}m · ${what}`;
     tip.style.display = 'block';
@@ -2279,10 +2559,10 @@ const History = {
     const workouts = Store.get('workouts', []);
     const el = document.getElementById('history-content');
     if (!workouts.length) {
-      el.innerHTML = '<div class="card text-center text-dim">No workouts yet. Start one from the Home tab!</div>';
+      el.innerHTML = Progress.render() + '<div class="card text-center text-dim">No workouts yet. Start one from the Home tab!</div>';
       return;
     }
-    let html = '';
+    let html = Progress.render();
     const gym = Store.get('stravaGym', []);
     const reversed = [...workouts].reverse();
     reversed.slice(0, 50).forEach(w => {
@@ -2306,7 +2586,8 @@ const History = {
           if (!ex.sets || !ex.sets.length) return;
           const setsStr = ex.sets.map(s => {
             const w = s.actualWeight > 0 ? s.actualWeight + '×' : '';
-            return w + s.actualReps + (s.isAmrap ? ' AMRAP' : '');
+            const txt = w + s.actualReps + (s.isAmrap ? ' AMRAP' : '');
+            return s.isWarmup ? `<span style="opacity:.6">w ${txt}</span>` : s.isExtra ? `<span style="color:var(--success)">+${txt}</span>` : txt;
           }).join(', ');
           html += `<div class="text-sm"><span style="color:var(--text)">${ex.name}:</span> <span class="text-dim">${setsStr}</span></div>`;
         });
@@ -2384,7 +2665,7 @@ const Settings = {
   saveCardio() {
     const profile = Store.get('profile', {}) || {};
     const n = id => parseInt(document.getElementById(id).value) || 0;
-    const c = { maxHr: n('set-maxhr') || 185, z2Low: n('set-z2low') || 111, z2High: n('set-z2high') || 130, z2Goal: n('set-z2goal') || 120, hardGoal: n('set-hardgoal') || 2, liftGoal: n('set-liftgoal') || 3 };
+    const c = { maxHr: n('set-maxhr') || 185, z2Low: n('set-z2low') || 111, z2High: n('set-z2high') || 130, z2Goal: n('set-z2goal') || 120, hardGoal: n('set-hardgoal') || 2, liftGoal: n('set-liftgoal') || 4 };
     if (c.z2Low >= c.z2High) { alert('Zone 2 low must be below high.'); return; }
     profile.cardio = c;
     Store.set('profile', profile);
@@ -2624,6 +2905,8 @@ const App = {
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.getElementById('page-workout').classList.add('active');
       Workout.render();
+      Guard.startWatching();
+      Guard.check(true);
       return;
     }
     if (!Store.get('program', null)) { Nav.go('setup'); return; }
@@ -2689,6 +2972,7 @@ const App = {
 };
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && Timer.state !== 'idle') Timer.keepAwake();
+  if (document.visibilityState === 'visible' && Workout.data) Guard.check(true);
 });
 
 // ===================== SERVICE WORKER =====================
