@@ -1212,7 +1212,34 @@ const Progress = {
       ${s.rest ? `<div class="text-sm mt-8">Rests on time: ${s.rest}</div>` : ''}
       <div class="text-sm mt-8" style="color:${s.tone === 'warn' ? 'var(--warning)' : 'var(--success)'}">${esc(s.schedule)}</div>
       <div class="text-sm text-dim">This week: lifts ${s.week.lifts}/${s.week.liftGoal} · Zone 2 ${s.week.z2}/${s.week.z2Goal} min · hard ${s.week.hard}/${s.week.hardGoal}</div>
+      ${s.cardioAnswered ? '' : this.cardioNudge()}
     </div>`;
+  },
+  // Right after lifting: nudge toward this week's cardio, sized to what's left.
+  cardioNudge() {
+    const ws = weekStart(localDate()), p = Cardio.prefs(ws), st = Cardio.weekStats(ws);
+    const z2Left = Math.max(0, p.z2Goal - st.z2), hardLeft = Math.max(0, p.hardGoal - st.hard);
+    const z2Min = z2Left ? Math.min(45, Math.max(20, Math.ceil(z2Left / 5) * 5)) : 30;
+    const need = [z2Left ? `${z2Left} min Zone 2` : '', hardLeft ? `${hardLeft} hard session${hardLeft === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ');
+    const btn = (label, js) => `<button class="band-btn" style="padding:8px 10px" onclick="${js}">${label}</button>`;
+    return `<div style="border-top:1px solid var(--surface2);margin-top:10px;padding-top:10px">
+      <div class="text-sm" style="font-weight:700">Cardio now?</div>
+      <div class="text-sm text-dim mb-8">${need ? `Still need ${need} this week.` : 'Weekly cardio goals are met. Extra is a bonus.'}</div>
+      <div class="row gap-8" style="flex-wrap:wrap">
+        ${btn(`Treadmill Zone 2 · ${z2Min}m`, `Progress.cardio('z2-tread',${z2Min})`)}
+        ${hardLeft ? btn('Sprints / incline', `Progress.cardio('incline',20)`) : ''}
+        ${btn('Outdoor', `Progress.cardio('run',30)`)}
+        ${btn('Skip for now', 'Progress.cardio(null)')}
+      </div>
+      <div class="text-sm text-dim mt-8">Record it in Strava with your strap and it imports with heart rate; or log it by hand.</div>
+    </div>`;
+  },
+  cardio(type, min) {
+    const s = this.lastSummary();
+    if (s) { s.cardioAnswered = type || 'skip'; this.saveSummary(s); }
+    if (!type) { Home.render(); return; }
+    Cardio.prefill = { type, duration: min, notes: 'After lifting' };
+    Nav.go('cardio');
   },
   makeSummary(record, auto) {
     const prev = Store.get('workouts', []).slice(0, -1);
