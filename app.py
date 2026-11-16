@@ -147,6 +147,18 @@ def strava_series(act_id):
     return json.loads(save_series(act_id, s))
 
 
+def strava_terrain(act_id):
+    """Full streams for one activity (time, distance, altitude, grade, latlng,
+    heart rate) for terrain-vs-HR analysis. Not cached."""
+    token = strava_token()
+    if not token:
+        return {"error": "not connected"}
+    s = _http_json(f"https://www.strava.com/api/v3/activities/{act_id}/streams?"
+                   "keys=time,distance,altitude,grade_smooth,latlng,heartrate,velocity_smooth"
+                   "&key_by_type=true", token=token)
+    return {k: v.get("data") for k, v in s.items()}
+
+
 def strava_sync(after):
     token = strava_token()
     if not token:
@@ -258,6 +270,16 @@ class Handler(BaseHTTPRequestHandler):
             with db() as c:
                 rows = c.execute("SELECT key,value,updated FROM docs").fetchall()
             return self._send(200, {r["key"]: {"value": json.loads(r["value"]), "updated": r["updated"]} for r in rows})
+        if path.startswith("/api/strava/terrain/"):
+            act = path.rsplit("/", 1)[1]
+            if not act.isdigit():
+                return self._send(400, {"error": "bad id"})
+            try:
+                return self._send(200, strava_terrain(int(act)))
+            except urllib.error.HTTPError as e:
+                return self._send(502, {"error": f"Strava returned {e.code}"})
+            except (urllib.error.URLError, TimeoutError):
+                return self._send(504, {"error": "Strava unreachable"})
         if path.startswith("/api/strava/series/"):
             act = path.rsplit("/", 1)[1]
             if not act.isdigit():
