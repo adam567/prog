@@ -477,11 +477,13 @@ const BLOCKS = [
       { name: 'Upper Hypertrophy', label: 'B', main: [],
         acc: [
           { name: 'DB Press (Flat/Incline)', reps: '6-8', sets: 2, rir: 3, defaultWeight: 55 },
-          { name: 'Pullups', reps: 'max', sets: 3, rir: 2, defaultWeight: 0 },
-          { name: 'Bent Row', reps: '8-10', sets: 2, rir: 2, defaultWeight: 135 },
-          { name: 'OHP / Military Press', reps: '5-7', sets: 2, rir: 3, defaultWeight: 95 },
-          { name: 'DB Curl', reps: '6-8', sets: 3, rir: 1, defaultWeight: 30 },
-          { name: 'Tricep Extension', reps: '6-8', sets: 3, rir: 1, defaultWeight: 25 },
+          { name: 'Pullups', reps: '6-8', sets: 3, rir: 2, defaultWeight: 0 },
+          { name: 'Bent Row', reps: '6-8', sets: 2, rir: 2, defaultWeight: 135 },
+          { name: 'Seated Military Press', was: 'OHP / Military Press', reps: '5-7', sets: 2, rir: 3, defaultWeight: 95 },
+          { name: 'DB Curl', reps: '6-8', sets: 5, rir: 1, defaultWeight: 30 },
+          { name: 'Light DB Curl', reps: ['20', '10', '10', '10'], sets: 4, rir: null, quick: true, defaultWeight: 20 },
+          { name: 'Tricep Extension', reps: '6-8', sets: 5, rir: 1, defaultWeight: 25 },
+          { name: 'Front Squat', reps: '10', sets: 4, rir: 3, defaultWeight: 135 },
           { name: 'KB Swings (60 lb)', reps: '15-20', sets: 2, rir: null, defaultWeight: 60 },
         ]
       },
@@ -522,12 +524,14 @@ const BLOCKS = [
       },
       { name: 'Upper Hypertrophy', label: 'B', main: [],
         acc: [
-          { name: 'DB Press (Flat/Incline)', reps: '8-10', sets: 2, rir: 3, defaultWeight: 55 },
-          { name: 'Pullups', reps: 'max', sets: 3, rir: 2, defaultWeight: 0 },
-          { name: 'Bent Row', reps: '8-10', sets: 2, rir: 2, defaultWeight: 135 },
-          { name: 'OHP / Military Press', reps: '6-8', sets: 2, rir: 3, defaultWeight: 95 },
-          { name: 'DB Curl', reps: '8-10', sets: 3, rir: 1, defaultWeight: 30 },
-          { name: 'Tricep Extension', reps: '8-10', sets: 3, rir: 1, defaultWeight: 25 },
+          { name: 'DB Press (Flat/Incline)', reps: '6-8', sets: 2, rir: 3, defaultWeight: 55 },
+          { name: 'Pullups', reps: '6-8', sets: 3, rir: 2, defaultWeight: 0 },
+          { name: 'Bent Row', reps: '6-8', sets: 2, rir: 2, defaultWeight: 135 },
+          { name: 'Seated Military Press', was: 'OHP / Military Press', reps: '5-7', sets: 2, rir: 3, defaultWeight: 95 },
+          { name: 'DB Curl', reps: '6-8', sets: 5, rir: 1, defaultWeight: 30 },
+          { name: 'Light DB Curl', reps: ['20', '10', '10', '10'], sets: 4, rir: null, quick: true, defaultWeight: 20 },
+          { name: 'Tricep Extension', reps: '6-8', sets: 5, rir: 1, defaultWeight: 25 },
+          { name: 'Light Tricep Extension', reps: ['20', '10', '10', '10'], sets: 4, rir: null, quick: true, defaultWeight: 20 },
           { name: 'KB Swings (60 lb)', reps: '15-20', sets: 2, rir: null, defaultWeight: 60 },
         ]
       },
@@ -569,11 +573,13 @@ const BLOCKS = [
       { name: 'Upper Hypertrophy', label: 'B', main: [],
         acc: [
           { name: 'DB Press (Flat/Incline)', reps: '6-8', sets: 2, rir: 3, defaultWeight: 55 },
-          { name: 'Pullups', reps: 'max', sets: 3, rir: 2, defaultWeight: 0 },
-          { name: 'Bent Row', reps: '6-8', sets: 3, rir: 2, defaultWeight: 135 },
-          { name: 'OHP / Military Press', reps: '5-7', sets: 2, rir: 3, defaultWeight: 95 },
-          { name: 'DB Curl', reps: '6-8', sets: 3, rir: 1, defaultWeight: 30 },
-          { name: 'Tricep Extension', reps: '6-8', sets: 3, rir: 1, defaultWeight: 25 },
+          { name: 'Pullups', reps: '6-8', sets: 3, rir: 2, defaultWeight: 0 },
+          { name: 'Bent Row', reps: '6-8', sets: 2, rir: 2, defaultWeight: 135 },
+          { name: 'Seated Military Press', was: 'OHP / Military Press', reps: '5-7', sets: 2, rir: 3, defaultWeight: 95 },
+          { name: 'DB Curl', reps: '6-8', sets: 5, rir: 1, defaultWeight: 30 },
+          { name: 'Light DB Curl', reps: ['20', '10', '10', '10'], sets: 4, rir: null, quick: true, defaultWeight: 20 },
+          { name: 'Tricep Extension', reps: '6-8', sets: 5, rir: 1, defaultWeight: 25 },
+          { name: 'Light Tricep Extension', reps: ['20', '10', '10', '10'], sets: 4, rir: null, quick: true, defaultWeight: 20 },
         ]
       },
       { name: 'Squat / Bench / Legs', label: 'C',
@@ -1121,7 +1127,7 @@ const Planner = {
     const accs = dayDef.acc.filter(a => !opts.lite || a.name.startsWith('KB '));
     const order = [...accs.filter(a => a.name.startsWith('KB ')), ...accs.filter(a => !a.name.startsWith('KB '))];
     const keep = new Set();
-    order.forEach(a => { const cost = a.sets * S.acc; if (fits(cost)) { keep.add(a); used += cost; } });
+    order.forEach(a => { const cost = this.accCost(a, S); if (fits(cost)) { keep.add(a); used += cost; } });
     // 5. "Open": two more working sets per lift, round-robin, up to +2 per lift.
     if (!opts.lite && !asWritten) for (let r = 0; r < 2; r++) mains.forEach(x => { if (x.weight && fits(S.main)) { x.extra++; used += S.main; } });
 
@@ -1136,12 +1142,12 @@ const Planner = {
     });
     accs.forEach(a => {
       const w = a.defaultWeight || 0, sets = [];
-      for (let i = 0; i < a.sets; i++) sets.push({ goalWeight: w, goalReps: a.reps, actualWeight: w, actualReps: a.reps, isAmrap: false, done: false });
+      for (let i = 0; i < a.sets; i++) { const r = Array.isArray(a.reps) ? a.reps[i % a.reps.length] : a.reps; sets.push({ goalWeight: w, goalReps: r, actualWeight: w, actualReps: r, isAmrap: false, done: false }); }
       const cut = !keep.has(a);
-      exercises.push({ name: a.name, lift: null, isMain: false, rir: a.rir, sets, skipped: cut, cutForTime: cut });
+      exercises.push({ name: a.name, was: a.was, lift: null, isMain: false, rir: a.rir, sets, skipped: cut, cutForTime: cut });
     });
 
-    const fullSec = S.overhead + mains.reduce((t, x) => t + Math.max(x.n, fillTo) * S.main + (x.weight && !dayDef.isTestDay ? this.WARMUPS.length * S.warm : 0), 0) + accs.reduce((t, a) => t + a.sets * S.acc, 0);
+    const fullSec = S.overhead + mains.reduce((t, x) => t + Math.max(x.n, fillTo) * S.main + (x.weight && !dayDef.isTestDay ? this.WARMUPS.length * S.warm : 0), 0) + accs.reduce((t, a) => t + this.accCost(a, S), 0);
     return {
       dayDef, block, absWeek, amrap, exercises, mains,
       cut: accs.filter(a => !keep.has(a)).map(a => a.name),
@@ -1150,19 +1156,22 @@ const Planner = {
     };
   },
 
-  // Accessory weights carry over from the most recent workout that logged them.
+  // Quick sets (light 20/10/10/10 finishers, ~20 s rests) cost less time than full sets.
+  accCost(a, S) { return a.sets * (a.quick ? 45 : S.acc); },
+
+  // Accessory weights carry over from the most recent workout that logged them
+  // (or under the exercise's old name, `was`, after a rename).
   applyPreviousWeights(exercises) {
     const workouts = Store.get('workouts', []);
     const done = new Set();
     for (let i = workouts.length - 1; i >= 0; i--) {
       (workouts[i].exercises || []).forEach(prevEx => {
-        if (done.has(prevEx.name)) return;
         const last = (prevEx.sets || []).find(s => s.actualWeight > 0);
         if (!last) return;
         exercises.forEach(curEx => {
-          if (curEx.isMain || curEx.name !== prevEx.name) return;
+          if (curEx.isMain || (curEx.name !== prevEx.name && curEx.was !== prevEx.name) || done.has(curEx.name)) return;
           curEx.sets.forEach(s => { s.goalWeight = last.actualWeight; s.actualWeight = last.actualWeight; });
-          done.add(prevEx.name);
+          done.add(curEx.name);
         });
       });
     }
@@ -1186,7 +1195,7 @@ const Planner = {
       if (ex.note) detail.push(ex.note);
       if (ex.cutForTime) detail.push('<span style="color:var(--warning)">cut for time</span>');
       return `<div class="mb-8" style="${ex.cutForTime ? 'opacity:.55' : ''}">
-        <div class="row"><span style="flex:1">${ex.name}</span><span style="font-weight:700">${lb(s0.goalWeight)}</span><span class="text-dim" style="min-width:70px;text-align:right;white-space:nowrap;padding-left:8px">${work.length}×${s0.goalReps}</span></div>
+        <div class="row"><span style="flex:1">${ex.name}</span><span style="font-weight:700">${lb(s0.goalWeight)}</span><span class="text-dim" style="min-width:70px;text-align:right;white-space:nowrap;padding-left:8px">${new Set(work.map(s => s.goalReps)).size > 1 ? work.map(s => s.goalReps).join('/') : `${work.length}×${s0.goalReps}`}</span></div>
         ${detail.length ? `<div class="text-sm text-dim">${detail.join(' · ')}</div>` : ''}
       </div>`;
     }).join('') + `</div>`;
