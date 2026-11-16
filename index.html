@@ -85,6 +85,15 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
 .set-check.countdown{background:var(--warning);border-color:var(--warning);color:#000;font-size:.85rem;font-weight:700}
 .set-check.timing{background:var(--accent);border-color:var(--accent);color:#fff;font-size:.65rem;font-weight:700}
 .set-tut{font-size:.65rem;color:var(--dim);text-align:center;width:32px;flex-shrink:0}
+.set-check.locked{opacity:.3}
+.set-note{font-size:.7rem;color:var(--dim);margin:-4px 0 6px 40px}
+#set-bar{position:fixed;left:12px;right:12px;bottom:76px;z-index:300;border:none;border-radius:14px;padding:16px;font-size:1.15rem;font-weight:700;color:#fff;background:var(--accent);box-shadow:0 4px 20px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer}
+#set-bar.countdown{background:var(--warning);color:#000}
+#set-bar.rest{background:var(--primary)}
+#set-bar .end{font-size:.75rem;font-weight:600;background:rgba(0,0,0,.25);color:inherit;border:none;border-radius:8px;padding:6px 10px;margin-left:auto}
+#toast{position:fixed;left:12px;right:12px;bottom:150px;z-index:350;background:var(--surface3);color:var(--text);border-radius:12px;padding:12px;box-shadow:0 4px 20px rgba(0,0,0,.5);display:flex;align-items:center;gap:10px;font-size:.85rem}
+#toast button{flex-shrink:0}
+#page-workout{padding-bottom:90px}
 .amrap-badge{background:var(--warning);color:#000;padding:1px 6px;border-radius:4px;font-size:.65rem;font-weight:700;margin-left:4px}
 .skip-btn{font-size:.75rem;color:var(--dim);background:none;border:none;cursor:pointer;padding:4px 8px}
 
@@ -472,7 +481,7 @@ const BLOCKS = [
           { name: 'OHP / Military Press', reps: '5-7', sets: 2, rir: 3, defaultWeight: 95 },
           { name: 'DB Curl', reps: '6-8', sets: 3, rir: 1, defaultWeight: 30 },
           { name: 'Tricep Extension', reps: '6-8', sets: 3, rir: 1, defaultWeight: 25 },
-          { name: 'KB Swings (49 lb)', reps: '15-20', sets: 2, rir: null, defaultWeight: 49 },
+          { name: 'KB Swings (60 lb)', reps: '15-20', sets: 2, rir: null, defaultWeight: 60 },
         ]
       },
       { name: 'Squat / Bench / Legs', label: 'C',
@@ -518,7 +527,7 @@ const BLOCKS = [
           { name: 'OHP / Military Press', reps: '6-8', sets: 2, rir: 3, defaultWeight: 95 },
           { name: 'DB Curl', reps: '8-10', sets: 3, rir: 1, defaultWeight: 30 },
           { name: 'Tricep Extension', reps: '8-10', sets: 3, rir: 1, defaultWeight: 25 },
-          { name: 'KB Swings (49 lb)', reps: '15-20', sets: 2, rir: null, defaultWeight: 49 },
+          { name: 'KB Swings (60 lb)', reps: '15-20', sets: 2, rir: null, defaultWeight: 60 },
         ]
       },
       { name: 'Squat / Bench / Legs', label: 'C',
@@ -623,14 +632,14 @@ const BLOCKS = [
   },
 ];
 
-// Kettlebell work (49 lb unless noted) added to each training block, not the taper.
+// Kettlebell work (60 lb unless noted; the light bell is 40 lb) added to each training block, not the taper.
 // A: swing finisher for conditioning. B: carry for grip/trunk. C: goblet squat
 // volume. D: clean & press for shoulders and hips.
 const KB_ADDONS = {
-  A: [{ name: 'KB Swing (49 lb), EMOM', reps: '10', sets: 5, rir: null, defaultWeight: 49 }],
-  B: [{ name: 'KB Suitcase Carry (49 lb)', reps: '40 yd/side', sets: 3, rir: null, defaultWeight: 49 }],
-  C: [{ name: 'KB Goblet Squat (49 lb)', reps: '10', sets: 2, rir: 3, defaultWeight: 49 }],
-  D: [{ name: 'KB Clean & Press (49 lb)', reps: '5/side', sets: 3, rir: 2, defaultWeight: 49 }],
+  A: [{ name: 'KB Swing (60 lb), EMOM', reps: '10', sets: 5, rir: null, defaultWeight: 60 }],
+  B: [{ name: 'KB Suitcase Carry (60 lb)', reps: '40 yd/side', sets: 3, rir: null, defaultWeight: 60 }],
+  C: [{ name: 'KB Goblet Squat (60 lb)', reps: '10', sets: 2, rir: 3, defaultWeight: 60 }],
+  D: [{ name: 'KB Clean & Press (40 lb)', reps: '5/side', sets: 3, rir: 2, defaultWeight: 40 }],
 };
 BLOCKS.slice(0, 3).forEach(b => b.days.forEach(d => {
   (KB_ADDONS[d.label] || []).forEach(a => { if (!d.acc.some(x => x.name.startsWith(a.name.split(' (')[0]))) d.acc.push(a); });
@@ -661,6 +670,19 @@ function weekStart(dateStr) {
 }
 function addDays(dateStr, n) { const d = parseLocal(dateStr); d.setDate(d.getDate() + n); return localDate(d); }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
+// Small message at the bottom with an optional action button; goes away after 8 s.
+function toast(msg, label, fn) {
+  let el = document.getElementById('toast');
+  if (el) el.remove();
+  el = document.createElement('div');
+  el.id = 'toast';
+  el.innerHTML = `<div style="flex:1">${msg}</div>${label ? `<button class="btn btn-sm btn-success" style="width:auto">${esc(label)}</button>` : ''}<button class="skip-btn" aria-label="Dismiss">✕</button>`;
+  const close = () => { clearTimeout(el._t); el.remove(); };
+  if (label) el.querySelector('.btn').onclick = () => { close(); fn(); };
+  el.querySelector('.skip-btn').onclick = close;
+  el._t = setTimeout(close, 8000);
+  document.body.appendChild(el);
+}
 
 // Ease-in after a layoff: main-lift loads scaled down for the first weeks.
 function rampFactor(absWeek, dayNum) {
@@ -1210,6 +1232,10 @@ const Progress = {
       <div class="text-sm text-dim mb-8">Day ${s.dayLabel} · ${s.duration} min${s.plannedMin ? ` (planned ~${s.plannedMin})` : ''} · session ${s.session} of ${totalDays()}</div>
       ${lines}
       ${s.rest ? `<div class="text-sm mt-8">Rests on time: ${s.rest}</div>` : ''}
+      ${(s.maxOffer || []).map(o => `<div style="border-top:1px solid var(--surface2);margin-top:10px;padding-top:10px">
+        <div class="text-sm">${liftName(o.lift)}: you lifted ${o.used} where ${o.goal} was planned. Set the ${liftName(o.lift).toLowerCase()} working max ${o.from} → <strong>${o.to}</strong> so the program builds from what you lifted?</div>
+        <div class="row gap-8 mt-8"><button class="band-btn" style="padding:8px 10px" onclick="Progress.applyMax('${o.lift}',${o.to})">Set ${o.to}</button><button class="band-btn" style="padding:8px 10px" onclick="Progress.dropOffer('${o.lift}')">Keep ${o.from}</button></div>
+      </div>`).join('')}
       <div class="text-sm mt-8" style="color:${s.tone === 'warn' ? 'var(--warning)' : 'var(--success)'}">${esc(s.schedule)}</div>
       <div class="text-sm text-dim">This week: lifts ${s.week.lifts}/${s.week.liftGoal} · Zone 2 ${s.week.z2}/${s.week.z2Goal} min · hard ${s.week.hard}/${s.week.hardGoal}</div>
       ${s.cardioAnswered ? '' : this.cardioNudge()}
@@ -1250,14 +1276,50 @@ const Progress = {
       return { name: e.name, sets: work.map(s => `${s.actualWeight}×${s.actualReps}`).join(', '), extra: work.filter(s => s.isExtra).length, e: best, pr: best > prevBest && prevBest > 0 };
     });
     const t = record.timer || {};
+    const maxOffer = this.maxOffers(record);
     const ws = Cardio.weekStats(weekStart(localDate())), p = Cardio.prefs(weekStart(localDate()));
     const st = Schedule.status();
     return {
       auto, dayLabel: record.dayLabel, duration: record.duration, plannedMin: record.plannedMin, session: (Store.get('program', {}) || {}).currentDay || 0,
-      lifts, rest: t.restPeriods ? `${t.restPeriods - t.restOver} of ${t.restPeriods} (avg ${fmtTime(t.avgRest)})` : '',
+      lifts, maxOffer, rest: t.restPeriods ? `${t.restPeriods - t.restOver} of ${t.restPeriods} (avg ${fmtTime(t.avgRest)})` : '',
       schedule: st.text, tone: st.tone,
       week: { lifts: ws.lifts, liftGoal: p.liftGoal, z2: ws.z2, z2Goal: p.z2Goal, hard: ws.hard, hardGoal: p.hardGoal },
     };
+  },
+  // Every working set of a main lift lighter (or heavier) than planned: offer
+  // the working max that would have programmed what was actually lifted.
+  maxOffers(record) {
+    const block = getBlockAndWeek((Store.get('program', {}) || {}).currentDay || 0).block;
+    const maxes = getMaxes(block);
+    const f = rampFactor(record.absWeek, record.dayNum);
+    return (record.exercises || []).filter(e => e.isMain && e.lift && e.pct).map(e => {
+      const work = e.sets.filter(s => !s.isWarmup && !s.isBackoff && !s.isExtra && s.goalWeight > 0 && s.actualWeight > 0);
+      if (!work.length) return null;
+      const lighter = work.every(s => s.actualWeight < s.goalWeight), heavier = work.every(s => s.actualWeight > s.goalWeight);
+      if (!lighter && !heavier) return null;
+      const used = lighter ? Math.max(...work.map(s => s.actualWeight)) : Math.min(...work.map(s => s.actualWeight));
+      let to = roundTo5(used / (e.pct * f));
+      // Nearest max that really programs `used` today.
+      for (const d of [0, -5, 5, -10, 10]) if (roundTo5((to + d) * e.pct * f) === used) { to += d; break; }
+      if (to === maxes[e.lift]) return null;
+      return { lift: e.lift, from: maxes[e.lift], to, used, goal: work[0].goalWeight };
+    }).filter(Boolean);
+  },
+  applyMax(lift, to) {
+    const prog = Store.get('program', {}) || {};
+    const block = getBlockAndWeek(prog.currentDay || 0).block;
+    prog.blockMaxes = prog.blockMaxes || [];
+    prog.blockMaxes[block] = { ...getMaxes(block), [lift]: to };
+    Store.set('program', prog);
+    const profile = Store.get('profile', {}) || {};
+    profile[lift] = to;
+    Store.set('profile', profile);
+    this.dropOffer(lift);
+  },
+  dropOffer(lift) {
+    const s = this.lastSummary();
+    if (s && s.maxOffer) { s.maxOffer = s.maxOffer.filter(o => o.lift !== lift); this.saveSummary(s); }
+    Home.render();
   },
   dismiss() { try { localStorage.removeItem('ph3__summary'); } catch {} Home.render(); },
   saveSummary(s) { try { localStorage.setItem('ph3__summary', JSON.stringify(s)); } catch {} },
@@ -1275,7 +1337,7 @@ const Guard = {
   check(onOpen) {
     const d = Workout.data;
     if (!d) { this.hide(); return; }
-    if (Workout.activeSet) return; // mid-set: clearly still going
+    if (Workout.activeSet || Workout.emom) return; // mid-set: clearly still going
     const idle = this.idleMs(d), total = Date.now() - d.startTime;
     const lastAt = new Date(d.lastActivity || d.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     if (total > this.CAP_MIN * 60000) return this.autoEnd(`Open for over 4 hours, so it was ended at your last activity (${lastAt}).`);
@@ -1417,6 +1479,13 @@ const Workout = {
         </div>
         <div class="ex-body">`;
 
+      if (this.isEmom(ex)) {
+        const every = ex.every || 60;
+        html += `<div class="band-row"><span class="text-dim text-sm">Every:</span>
+          ${[60, 90, 120].map(v => `<button class="band-btn ${every === v ? 'active' : ''}" onclick="Workout.setEvery(${ei},${v})">${fmtTime(v)}</button>`).join('')}
+          <span class="text-dim text-sm" style="margin-left:auto">${this.emom && this.emom.ei === ei ? 'running' : 'tap ▶ to start'}</span></div>`;
+      }
+
       if (ex.isMain && !ex.sets.some(s => s.isWarmup)) {
         html += `<div class="text-dim text-sm mb-8" style="font-style:italic">Warm up to working weight</div>`;
       }
@@ -1461,15 +1530,15 @@ const Workout = {
           <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
             ${done
               ? `<button class="set-check ${s.isAmrap ? 'amrap-done' : 'done'}" onclick="Workout.undoSet(${ei},${si})">✓</button>
-                 ${s.tut ? `<div class="set-tut">${s.tut}s</div>` : ''}`
-              : (Workout.activeSet && Workout.activeSet.ei === ei && Workout.activeSet.si === si)
-                ? `<button class="set-check timing" id="tut-btn" onclick="Workout.stopSet(${ei},${si})">■</button>
-                   <div class="set-tut" id="tut-live">0s</div>`
-                : `<button class="set-check" onclick="Workout.startSet(${ei},${si})">▶</button>
-                   <button style="font-size:.6rem;color:var(--primary);background:none;border:none;cursor:pointer;padding:2px" onclick="event.stopPropagation();Workout.backfillSet(${ei},${si})">est.</button>`
+                 <button class="set-tut" style="background:none;border:none;cursor:pointer;padding:2px 0;color:${s.rpe ? 'var(--warning)' : 'var(--dim)'}" onclick="Workout.noteSet(${ei},${si})">${s.tut ? s.tut + 's' : ''}${s.rpe ? ' @' + s.rpe : s.tut ? '' : '+RPE'}</button>`
+              : this.isActive(ei, si)
+                ? `<button class="set-check ${this.activeSet.startTime ? 'timing' : 'countdown'}" id="tut-btn" onclick="Workout.tapActive()">${this.activeSet.startTime ? '■' : '…'}</button>
+                   <div class="set-tut" id="tut-live">${this.activeSet.startTime ? '' : 'ready'}</div>`
+                : `<button class="set-check ${this.activeSet || (this.emom && this.emom.ei !== ei) ? 'locked' : ''}" onclick="Workout.startSet(${ei},${si})">▶</button>
+                   <button style="font-size:.6rem;color:var(--primary);background:none;border:none;cursor:pointer;padding:2px" onclick="event.stopPropagation();Workout.backfillSet(${ei},${si})">done</button>`
             }
           </div>
-        </div>`;
+        </div>${s.note ? `<div class="set-note">${esc(s.note)}</div>` : ''}`;
       });
 
       html += `<div class="row gap-8 mt-8" style="justify-content:flex-end">${ex.isMain ? `<button class="btn btn-outline btn-xs" style="width:auto" onclick="Workout.addBackoff(${ei})">+ Back-off</button>` : ''}<button class="btn btn-outline btn-xs" style="width:auto" onclick="Workout.addSet(${ei})">+ Add Set</button></div>`;
@@ -1495,6 +1564,7 @@ const Workout = {
 
     document.getElementById('workout-content').innerHTML = html;
     this.updateClock();
+    this.paintActive();
   },
 
   // Time used vs budget, and estimated finish from the remaining sets.
@@ -1516,6 +1586,9 @@ const Workout = {
   save() {
     if (!this.data) return;
     this.data.lastActivity = Date.now();
+    const a = this.activeSet;
+    this.data.activeSet = a ? { ei: a.ei, si: a.si, tapAt: a.tapAt, startTime: a.startTime } : null;
+    this.data.emom = this.emom ? { ...this.emom } : null;
     Guard.hide();
     Store.set('activeWorkout', this.data);
   },
@@ -1537,15 +1610,25 @@ const Workout = {
   },
 
   adjWeight(ei, si, delta) {
-    this.data.exercises[ei].sets[si].actualWeight = Math.max(0, this.data.exercises[ei].sets[si].actualWeight + delta);
-    // Cascade to subsequent undone sets of same exercise
-    for (let i = si + 1; i < this.data.exercises[ei].sets.length; i++) {
-      if (!this.data.exercises[ei].sets[i].done) {
-        this.data.exercises[ei].sets[i].actualWeight = this.data.exercises[ei].sets[si].actualWeight;
-      }
-    }
+    this.applyWeight(ei, si, Math.max(0, this.data.exercises[ei].sets[si].actualWeight + delta));
+  },
+
+  // A weight change carries to the later, not-yet-done sets of the same kind
+  // (warm-up -> warm-ups, working -> working, back-off -> back-offs). If other
+  // later sets are left at a different weight, offer to move them too.
+  kind(s) { return s.isWarmup ? 'w' : s.isBackoff ? 'b' : 'x'; },
+  applyWeight(ei, si, w) {
+    const ex = this.data.exercises[ei], s = ex.sets[si];
+    s.actualWeight = w;
+    const later = ex.sets.slice(si + 1).filter(x => !x.done);
+    later.filter(x => this.kind(x) === this.kind(s)).forEach(x => { x.actualWeight = w; });
+    const others = later.filter(x => x.actualWeight !== w && !x.isBackoff);
     this.save();
     this.render();
+    if (others.length && w > 0) {
+      toast(`Use ${w} lb for the other ${others.length} remaining ${esc(ex.name)} set${others.length === 1 ? '' : 's'} too?`,
+        'Apply', () => { ex.sets.slice(si + 1).filter(x => !x.done && !x.isBackoff).forEach(x => { x.actualWeight = w; }); this.save(); this.render(); });
+    }
   },
 
   adjReps(ei, si, delta) {
@@ -1557,8 +1640,7 @@ const Workout = {
   },
 
   setWeight(ei, si, val) {
-    this.data.exercises[ei].sets[si].actualWeight = parseInt(val) || 0;
-    this.save();
+    this.applyWeight(ei, si, parseInt(val) || 0);
   },
 
   setReps(ei, si, val) {
@@ -1566,59 +1648,128 @@ const Workout = {
     this.save();
   },
 
-  activeSet: null,  // { ei, si, startTime, countdownInterval, tutInterval }
+  activeSet: null,  // { ei, si, tapAt, startTime, tick } - one timed set at a time
+  emom: null,       // { ei, every (s), t0, order: [set indexes], lastRound, lastBeep }
+  COUNTDOWN: 8,     // seconds from tapping ▶ to the clock starting
+  MIN_REST: 90,     // main-lift working sets: warn below this
+
+  isActive(ei, si) { return !!(this.activeSet && this.activeSet.ei === ei && this.activeSet.si === si); },
+  isEmom(ex) { return /EMOM/i.test(ex.name || ''); },
+  label(ei, si) {
+    const sets = this.data.exercises[ei].sets, me = sets[si];
+    const same = x => this.kind(x) === this.kind(me) && !!x.isExtra === !!me.isExtra;
+    const n = sets.slice(0, si + 1).filter(same).length;
+    return (me.isWarmup ? 'W' : me.isBackoff ? '↓' : me.isExtra ? '+' : 'S') + n;
+  },
+  setName(ei, si) { return `${this.data.exercises[ei].name} ${this.label(ei, si)}`; },
+
+  // Before starting or logging a different set: never silently drop a running one.
+  release(ei, si) {
+    const a = this.activeSet;
+    if (this.emom && this.emom.ei !== ei) {
+      if (!confirm(`The EMOM for ${this.data.exercises[this.emom.ei].name} is still running.\n\nOK = end it and go on.\nCancel = keep it running.`)) return false;
+      this.endEmom();
+    }
+    if (!a || (a.ei === ei && a.si === si)) return true;
+    if (!a.startTime) { this.clearActiveTimers(); this.activeSet = null; return true; } // countdown on the wrong row: just move it
+    const secs = Math.round((Date.now() - a.startTime) / 1000);
+    if (!confirm(`${this.setName(a.ei, a.si)} is still running (${fmtTime(secs)}).\n\nOK = stop and save it, then go on to ${this.setName(ei, si)}.\nCancel = keep it running.`)) return false;
+    this.stopSet(a.ei, a.si);
+    return true;
+  },
 
   startSet(ei, si) {
-    // Clear any existing active set
-    this.clearActiveTimers();
-
-    const btn = document.querySelector('.set-check:not(.done):not(.amrap-done)');
-    this.activeSet = { ei, si, startTime: null, countdownInterval: null, tutInterval: null };
-
-    // 8-second countdown
-    let count = 8;
-    const checkBtn = event?.target || document.getElementById('tut-btn');
-
-    // Re-render to show countdown state, then start countdown
+    const ex = this.data.exercises[ei];
+    if (this.emom && this.emom.ei === ei) { this.emomTap(); return; }
+    if (this.isActive(ei, si)) { this.tapActive(); return; }
+    if (!this.release(ei, si)) return;
+    if (this.isEmom(ex)) { this.startEmom(ei); return; }
+    const warn = this.shortRest(ei, si);
+    if (warn && !confirm(warn)) return;
+    this.activeSet = { ei, si, tapAt: Date.now(), startTime: null };
+    this.save();
     this.render();
-    const tutBtn = document.getElementById('tut-btn');
-    const tutLive = document.getElementById('tut-live');
-    if (tutBtn) {
-      tutBtn.className = 'set-check countdown';
-      tutBtn.textContent = count;
-      tutBtn.onclick = () => this.cancelSet();
-    }
-    if (tutLive) tutLive.textContent = 'ready...';
+    this.runActive();
+  },
 
-    this.activeSet.countdownInterval = setInterval(() => {
-      count--;
-      const b = document.getElementById('tut-btn');
-      if (count > 0) {
-        if (b) b.textContent = count;
-      } else {
-        clearInterval(this.activeSet.countdownInterval);
-        this.activeSet.countdownInterval = null;
-        this.activeSet.startTime = Date.now();
+  // Drives the countdown and the live set clock (also after a reload).
+  runActive() {
+    const a = this.activeSet;
+    if (!a) return;
+    if (a.tick) clearInterval(a.tick);
+    a.tick = setInterval(() => {
+      if (this.activeSet !== a) { clearInterval(a.tick); return; }
+      if (!a.startTime && Date.now() - a.tapAt >= this.COUNTDOWN * 1000) {
+        a.startTime = a.tapAt + this.COUNTDOWN * 1000;
         Timer.start('working');
-        if (b) { b.className = 'set-check timing'; b.textContent = '■'; b.onclick = () => Workout.stopSet(ei, si); }
-        // Start live TUT counter
-        this.activeSet.tutInterval = setInterval(() => {
-          const elapsed = Math.round((Date.now() - this.activeSet.startTime) / 1000);
-          const live = document.getElementById('tut-live');
-          if (live) live.textContent = elapsed + 's';
-        }, 250);
         try { navigator.vibrate(100); } catch {}
+        this.save();
+        this.render();
+        return;
       }
-    }, 1000);
+      this.paintActive();
+    }, 250);
+  },
+
+  // Big stop bar at the bottom while a set (or an EMOM) is running.
+  bar() {
+    let bar = document.getElementById('set-bar');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'set-bar';
+      bar.innerHTML = '<span class="txt"></span><button class="end" onclick="event.stopPropagation();Workout.endEmom()">End</button>';
+      bar.onclick = () => Workout.tapActive();
+      document.body.appendChild(bar);
+    }
+    return bar;
+  },
+  paintBar(cls, text, showEnd) {
+    const bar = this.bar();
+    if (bar.className !== cls) bar.className = cls;
+    const t = bar.querySelector('.txt');
+    if (t.textContent !== text) t.textContent = text;
+    bar.querySelector('.end').style.display = showEnd ? '' : 'none';
+  },
+  paintActive() {
+    const a = this.activeSet, e = this.emom;
+    if ((!a && !e) || !this.data || Nav.current !== 'workout') { const b = document.getElementById('set-bar'); if (b) b.remove(); return; }
+    if (e) return this.paintEmom();
+    const name = this.setName(a.ei, a.si);
+    if (!a.startTime) {
+      const left = Math.max(1, Math.ceil((a.tapAt + this.COUNTDOWN * 1000 - Date.now()) / 1000));
+      this.paintBar('countdown', `${name} starts in ${left} · tap to cancel`, false);
+      const b = document.getElementById('tut-btn'); if (b) b.textContent = left;
+    } else {
+      const secs = Math.floor((Date.now() - a.startTime) / 1000);
+      this.paintBar('', `■  Stop ${name} · ${fmtTime(secs)}`, false);
+      const live = document.getElementById('tut-live'); if (live) live.textContent = secs + 's';
+    }
+  },
+  tapActive() {
+    if (this.emom) return this.emomTap();
+    const a = this.activeSet;
+    if (!a) return;
+    if (!a.startTime) return this.cancelSet();
+    this.stopSet(a.ei, a.si);
   },
 
   stopSet(ei, si) {
+    const a = this.activeSet;
     const s = this.data.exercises[ei].sets[si];
-    if (this.activeSet && this.activeSet.startTime) {
-      s.tut = Math.round((Date.now() - this.activeSet.startTime) / 1000);
+    if (a && a.startTime) {
+      const now = Date.now(), tut = Math.round((now - a.startTime) / 1000);
+      const reps = parseInt(s.actualReps) || 0;
+      // A few seconds for a multi-rep set almost always means "did the set, then remembered ▶".
+      if (tut < 5 && reps >= 3 && confirm(`That was only ${tut}s for ${reps} reps.\n\nDid you do the set before tapping ▶?\nOK = log it as ending when you tapped ▶, with an estimated time.\nCancel = keep ${tut}s.`)) {
+        this.clearActiveTimers();
+        this.activeSet = null;
+        return this.backfillSet(ei, si, a.tapAt);
+      }
+      s.tut = tut;
       // Exact set window, for lining up with a Strava heart-rate trace.
-      s.startedAt = this.activeSet.startTime;
-      s.endedAt = Date.now();
+      s.startedAt = a.startTime;
+      s.endedAt = now;
+      delete s.estimated;
     }
     s.done = true;
     this.clearActiveTimers();
@@ -1630,23 +1781,143 @@ const Workout = {
 
   undoSet(ei, si) {
     const s = this.data.exercises[ei].sets[si];
+    if (!confirm(`Undo ${this.setName(ei, si)}?\n\nIt goes back to not done${s.tut ? ` and its ${s.tut}s time is cleared` : ''}.`)) return;
     s.done = false;
     s.tut = 0;
+    delete s.startedAt; delete s.endedAt; delete s.estimated;
     this.save();
     this.render();
+  },
+
+  // Effort and a short note on a finished set: "10 barely" -> RPE 10, note "barely".
+  noteSet(ei, si) {
+    const s = this.data.exercises[ei].sets[si];
+    const cur = [s.rpe, s.note].filter(x => x != null && x !== '').join(' ');
+    const v = prompt(`${this.setName(ei, si)}: effort (RPE 5-10) and/or a note.\nExample: 10 barely got the last rep`, cur);
+    if (v === null) return;
+    const m = v.trim().match(/^(?:rpe\s*|@)?(\d+(?:\.5)?)(?![\d.])\s*[,;:-]?\s*(.*)$/i);
+    if (m && +m[1] >= 5 && +m[1] <= 10) { s.rpe = +m[1]; s.note = m[2].trim(); }
+    else { delete s.rpe; s.note = v.trim(); }
+    if (!s.note) delete s.note;
+    this.save();
+    this.render();
+  },
+
+  shortRest(ei, si) {
+    const ex = this.data.exercises[ei], s = ex.sets[si];
+    if (!ex.isMain || s.isWarmup || s.isBackoff) return '';
+    const prev = ex.sets.filter(x => x.done && x.endedAt).sort((a, b) => b.endedAt - a.endedAt)[0];
+    if (!prev || prev.actualWeight < 0.85 * s.actualWeight) return '';
+    const rest = Math.round((Date.now() - prev.endedAt) / 1000);
+    if (rest >= this.MIN_REST) return '';
+    return `Only ${rest}s since your last ${ex.name} set. Main lifts go best with 2-3 min of rest.\n\nOK = start anyway.\nCancel = keep resting.`;
   },
 
   cancelSet() {
     this.clearActiveTimers();
     this.activeSet = null;
+    this.save();
     this.render();
   },
 
   clearActiveTimers() {
-    if (this.activeSet) {
-      if (this.activeSet.countdownInterval) clearInterval(this.activeSet.countdownInterval);
-      if (this.activeSet.tutInterval) clearInterval(this.activeSet.tutInterval);
+    const a = this.activeSet;
+    if (a && a.tick) { clearInterval(a.tick); a.tick = null; }
+  },
+
+  // ---- EMOM / interval rounds: one clock for the whole block
+  setEvery(ei, v) {
+    if (this.emom && this.emom.ei === ei) { toast('End the EMOM before changing the interval.'); return; }
+    this.data.exercises[ei].every = v;
+    this.save();
+    this.render();
+  },
+  startEmom(ei) {
+    const ex = this.data.exercises[ei];
+    const order = ex.sets.map((s, i) => i).filter(i => !ex.sets[i].done);
+    if (!order.length) return;
+    this.emom = { ei, every: ex.every || 60, t0: Date.now() + this.COUNTDOWN * 1000, order, lastRound: -1, lastBeep: '' };
+    this.save();
+    this.render();
+    this.runEmom();
+  },
+  runEmom() {
+    clearInterval(this.emomTick);
+    this.emomTick = setInterval(() => this.stepEmom(), 250);
+    this.stepEmom();
+  },
+  emomRound() { return Math.floor((Date.now() - this.emom.t0) / (this.emom.every * 1000)); },
+  stepEmom() {
+    const e = this.emom;
+    if (!e || !this.data) { clearInterval(this.emomTick); return; }
+    const ex = this.data.exercises[e.ei];
+    if (!ex) { this.endEmom(); return; }
+    const k = this.emomRound(), N = e.order.length, ms = e.every * 1000;
+    let changed = false;
+    // A round that went by without a tap still counts, at this session's usual pace.
+    for (let j = 0; j < Math.min(k, N); j++) {
+      const s = ex.sets[e.order[j]];
+      if (s && !s.done) {
+        const tut = Math.min(e.every - 5, Math.round(this.secPerRep(ex) * (parseInt(s.actualReps) || 10)));
+        s.startedAt = e.t0 + j * ms; s.tut = tut; s.endedAt = s.startedAt + tut * 1000; s.estimated = true; s.done = true;
+        changed = true;
+      }
     }
+    if (k >= N) { this.endEmom(); return; }
+    if (k >= 0 && k !== e.lastRound) {
+      e.lastRound = k;
+      Timer.start('working');
+      try { navigator.vibrate(400); } catch {}
+      changed = true;
+    }
+    // Buzz 3-2-1 before each round.
+    const sec = Math.ceil((e.t0 + (k + 1) * ms - Date.now()) / 1000);
+    if (k < N - 1 && sec >= 1 && sec <= 3 && e.lastBeep !== `${k}:${sec}`) { e.lastBeep = `${k}:${sec}`; try { navigator.vibrate(80); } catch {} }
+    if (changed) { this.save(); this.render(); } else this.paintActive();
+  },
+  emomTap() {
+    const e = this.emom;
+    if (!e) return;
+    const ex = this.data.exercises[e.ei], k = this.emomRound();
+    if (k < 0) { this.endEmom(); return; } // tap during the countdown cancels
+    const s = ex.sets[e.order[k]];
+    if (!s || s.done) return; // this round is logged; wait for the next one
+    s.startedAt = e.t0 + k * e.every * 1000;
+    s.endedAt = Date.now();
+    s.tut = Math.round((s.endedAt - s.startedAt) / 1000);
+    s.done = true;
+    delete s.estimated;
+    Timer.start('resting');
+    if (k === e.order.length - 1) { this.endEmom(); return; }
+    this.save();
+    this.render();
+  },
+  endEmom() {
+    clearInterval(this.emomTick);
+    this.emomTick = null;
+    this.emom = null;
+    Timer.start('resting');
+    this.save();
+    this.render();
+  },
+  paintEmom() {
+    const e = this.emom, ex = this.data.exercises[e.ei], k = this.emomRound(), N = e.order.length, ms = e.every * 1000;
+    const toNext = Math.max(0, Math.ceil((e.t0 + (k + 1) * ms - Date.now()) / 1000));
+    if (k < 0) { this.paintBar('countdown', `EMOM starts in ${toNext} · tap to cancel`, false); return; }
+    const s = ex.sets[e.order[k]];
+    if (s && !s.done) this.paintBar('', `■  Round ${k + 1}/${N} done · ${fmtTime(Math.floor((Date.now() - e.t0 - k * ms) / 1000))}`, true);
+    else this.paintBar('rest', k + 1 < N ? `Round ${k + 2}/${N} in ${fmtTime(toNext)}` : 'Last round logged', true);
+  },
+
+  // Put a running set / EMOM back after a reload or app switch.
+  restoreActive() {
+    const d = this.data;
+    if (d.activeSet && d.activeSet.startTime && d.exercises[d.activeSet.ei]) {
+      this.activeSet = { ...d.activeSet };
+      Timer.start('working');
+      this.runActive();
+    }
+    if (d.emom && d.exercises[d.emom.ei]) { this.emom = { ...d.emom }; this.runEmom(); }
   },
 
   getAvgSecPerRep(exerciseName) {
@@ -1669,20 +1940,26 @@ const Workout = {
     return samples.reduce((a, b) => a + b, 0) / samples.length;
   },
 
-  backfillSet(ei, si) {
+  // This session's timed sets first, then history, then a typical pace.
+  secPerRep(ex, like) {
+    const timed = ex.sets.filter(x => x.done && x.tut > 4 && !x.estimated && parseInt(x.actualReps) > 0);
+    const same = like ? timed.filter(x => this.kind(x) === this.kind(like)) : [];
+    const own = (same.length ? same : timed).map(x => x.tut / parseInt(x.actualReps));
+    if (own.length) return own.reduce((a, b) => a + b, 0) / own.length;
+    return this.getAvgSecPerRep(ex.name) || (ex.isMain ? 6 : 3);
+  },
+
+  // "done": log a set you did without timing it, ending now (or at endAt).
+  backfillSet(ei, si, endAt) {
+    if (!this.release(ei, si)) return;
     const ex = this.data.exercises[ei];
     const s = ex.sets[si];
-    const reps = typeof s.actualReps === 'number' ? s.actualReps : parseInt(s.actualReps) || 0;
-    if (!reps) {
-      alert('Enter reps first');
-      return;
-    }
-    const avgSecPerRep = this.getAvgSecPerRep(ex.name);
-    if (!avgSecPerRep) {
-      alert('No TUT history found for ' + ex.name);
-      return;
-    }
-    s.tut = Math.round(avgSecPerRep * reps);
+    const reps = parseInt(s.actualReps) || 0;
+    const end = endAt || Date.now();
+    s.tut = Math.max(5, Math.round(this.secPerRep(ex, s) * (reps || 8)));
+    s.endedAt = end;
+    s.startedAt = end - s.tut * 1000;
+    s.estimated = true;
     s.done = true;
     Timer.start('resting');
     this.save();
@@ -1785,6 +2062,11 @@ const Workout = {
 
   saveAndExit(completed, opts = {}) {
     const d = this.data;
+    this.clearActiveTimers();
+    this.activeSet = null;
+    clearInterval(this.emomTick);
+    this.emom = null;
+    const bar = document.getElementById('set-bar'); if (bar) bar.remove();
     const endAt = opts.endAt ? Math.min(opts.endAt, Date.now()) : Date.now();
     const duration = Math.max(1, Math.round((endAt - d.startTime) / 60000));
 
@@ -1814,6 +2096,7 @@ const Workout = {
         lift: e.lift,
         isMain: e.isMain,
         band: e.band || null,
+        pct: e.pct || null,
         sets: e.sets.filter(s => s.done).map(s => ({
           goalWeight: s.goalWeight,
           goalReps: s.goalReps,
@@ -1826,6 +2109,9 @@ const Workout = {
           isWarmup: !!s.isWarmup,
           isExtra: !!s.isExtra,
           isBackoff: !!s.isBackoff,
+          ...(s.rpe ? { rpe: s.rpe } : {}),
+          ...(s.note ? { note: s.note } : {}),
+          ...(s.estimated ? { estimated: true } : {}),
         }))
       }))
     };
@@ -2307,7 +2593,7 @@ const BadNight = {
       desc: 'Low incline, conversational pace. Zone 2 only, no heroics.',
       prefill: { type: 'z2-tread', duration: 30, notes: 'Bad-night fallback: easy treadmill' } },
     { key: 'swings', title: 'Swings + walk', time: '20 min',
-      desc: '10 swings (49 lb) at the top of every minute for 10 minutes, then a 10-minute walk.',
+      desc: '10 swings (60 lb) at the top of every minute for 10 minutes, then a 10-minute walk.',
       prefill: { type: 'kb', duration: 20, notes: 'Bad-night fallback: 10×10 swings + walk' } },
     { key: 'carry', title: 'Carries + mobility', time: '15 min',
       desc: 'Suitcase carry 4 × 40 yd each side, goblet squat holds (3 × 30 s), dead hangs (3 × 20–30 s).',
@@ -2411,8 +2697,8 @@ const HrView = {
       return pts[lo] && Math.abs(pts[lo].ms - ms) < 15000 ? pts[lo].hr : null;
     };
     const sets = [];
-    (w.exercises || []).forEach(ex => (ex.sets || []).forEach((st, i) => {
-      if (st.startedAt && st.endedAt) sets.push({ ex: ex.name, n: i + 1, lbl: st.isWarmup ? 'W' : st.isBackoff ? '↓' : st.isExtra ? '+' : '#', start: st.startedAt, end: st.endedAt, weight: st.actualWeight, reps: st.actualReps });
+    (w.exercises || []).forEach((ex, ei) => (ex.sets || []).forEach((st, i) => {
+      if (st.startedAt && st.endedAt) sets.push({ ex: ex.name, ei, si: i, n: i + 1, lbl: st.isWarmup ? 'W' : st.isBackoff ? '↓' : st.isExtra ? '+' : '#', start: st.startedAt, end: st.endedAt, weight: st.actualWeight, reps: st.actualReps, tut: st.tut, est: !!st.estimated });
     }));
     sets.sort((a, b) => a.start - b.start);
     sets.forEach((st, i) => {
@@ -2428,16 +2714,67 @@ const HrView = {
         st.restStartHr = nearest(next.start);
       }
     });
+    const fixes = this.suggest(sets, pts);
     const setPts = pts.filter(p => sets.some(st => p.ms >= st.start && p.ms <= st.end));
     const drops = sets.filter(x => x.drop60 != null).map(x => x.drop60);
     const rests = sets.filter(x => x.rest != null).map(x => x.rest);
     return {
-      pts, sets,
+      pts, sets, fixes,
       start: pts.length ? pts[0].ms : t0, end: pts.length ? pts[pts.length - 1].ms : t0,
       avgAll: avg(pts), peakAll: max(pts), avgSets: avg(setPts),
       avgDrop: drops.length ? Math.round(drops.reduce((a, b) => a + b, 0) / drops.length) : null,
       avgRest: rests.length ? Math.round(rests.reduce((a, b) => a + b, 0) / rests.length) : null,
     };
+  },
+
+  // Sets whose ▶/■ taps were clearly off (a few seconds for a multi-rep set,
+  // or several times this lift's usual pace): place them from the heart-rate
+  // peak instead. HR peaks within a few seconds of racking the weight.
+  suggest(sets, pts) {
+    const pace = {};
+    sets.forEach(st => { const r = parseInt(st.reps) || 0; if (r && st.tut > 4 && !st.est) (pace[st.ex] = pace[st.ex] || []).push(st.tut / r); });
+    const med = a => { const b = [...a].sort((x, y) => x - y); return b[Math.floor(b.length / 2)]; };
+    const fixes = [], taken = [];
+    [...sets].sort((a, b) => a.start - b.start).forEach(st => {
+      const reps = parseInt(st.reps) || 0, p = pace[st.ex] ? med(pace[st.ex]) : null;
+      if (!reps || !p) return;
+      const tooShort = st.tut < 5 && reps >= 3, tooLong = st.tut > Math.max(45, 3 * p * reps);
+      if (!tooShort && !tooLong) return;
+      const others = sets.filter(o => o !== st && !(o.tut < 5 && (parseInt(o.reps) || 0) >= 3));
+      const prevEnd = Math.max(0, ...others.filter(o => o.end <= st.start + 1000).map(o => o.end), ...taken);
+      const nextStart = Math.min(Infinity, ...others.filter(o => o.start >= st.start + 1000).map(o => o.start));
+      // Skip the previous set's HR tail; for a too-long set the start tap is good.
+      const lo = tooLong ? st.start : prevEnd + 60000;
+      const hi = Math.min(nextStart, tooLong ? st.end : st.start + 15000);
+      const win = pts.filter(q => q.ms >= lo && q.ms <= hi);
+      if (win.length < 3) return;
+      const top = Math.max(...win.map(q => q.hr));
+      let k = win.findIndex(q => q.hr === top);
+      while (k + 1 < win.length && win[k + 1].hr >= top - 1) k++; // end of the peak plateau
+      const peak = win[k];
+      const dur = Math.round(p * reps);
+      let end = Math.round((peak.ms + 5000) / 1000) * 1000;
+      if (tooLong) end = Math.max(end, st.start + dur * 1000);
+      const start = tooLong ? st.start : end - dur * 1000;
+      if (start < prevEnd) return;
+      taken.push(end);
+      fixes.push({ ei: st.ei, si: st.si, name: `${st.ex} ${st.lbl}${st.n}`, from: [st.start, st.end, st.tut], start, end, tut: Math.round((end - start) / 1000) });
+    });
+    return fixes;
+  },
+  applyFixes(wi) {
+    const a = this.views[wi];
+    if (!a || !a.fixes.length) return;
+    const ws = Store.get('workouts', []), w = ws[wi];
+    a.fixes.forEach(f => {
+      const st = w.exercises[f.ei] && w.exercises[f.ei].sets[f.si];
+      if (!st) return;
+      st.startedAt = f.start; st.endedAt = f.end; st.tut = f.tut; st.timeFixedFromHr = true; delete st.estimated;
+    });
+    Store.set('workouts', ws);
+    const el = document.getElementById('hrv-' + wi);
+    if (el) el.innerHTML = '';
+    this.toggle(wi);
   },
 
   // ---- render
@@ -2477,6 +2814,15 @@ const HrView = {
       <div class="text-sm mt-8">Avg ${a.avgAll} · peak ${a.peakAll}${a.avgSets ? ` · during sets ${a.avgSets}` : ''}${a.avgRest != null ? ` · avg rest ${fmtTime(a.avgRest)}` : ''}${a.avgDrop != null ? ` · avg drop ${a.avgDrop} bpm in first minute of rest` : ''}</div>
     </div>`;
 
+    if (a.fixes.length) {
+      const clock = ms => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+      h += `<div style="background:var(--surface2);border-left:4px solid var(--warning);border-radius:10px;padding:10px;margin-bottom:10px">
+        <div class="text-sm" style="font-weight:700">${a.fixes.length} set${a.fixes.length === 1 ? '' : 's'} look mistimed</div>
+        ${a.fixes.map(f => `<div class="text-sm">${esc(f.name)}: ${f.from[2]}s at ${clock(f.from[0])} → <strong>${f.tut}s at ${clock(f.start)}</strong></div>`).join('')}
+        <div class="text-sm text-dim mt-8">Placed from the heart-rate peak for each set.</div>
+        <button class="band-btn mt-8" style="padding:8px 10px" onclick="HrView.applyFixes(${wi})">Apply fix${a.fixes.length === 1 ? '' : 'es'}</button>
+      </div>`;
+    }
     if (!a.sets.length) {
       return h + '<div class="text-sm text-dim mb-8">No set timings for this workout. Sets timed with ▶ / ■ in the app will be broken out here.</div>';
     }
@@ -2641,7 +2987,7 @@ const History = {
           if (!ex.sets || !ex.sets.length) return;
           const setsStr = ex.sets.map(s => {
             const w = s.actualWeight > 0 ? s.actualWeight + '×' : '';
-            const txt = w + s.actualReps + (s.isAmrap ? ' AMRAP' : '');
+            const txt = w + s.actualReps + (s.isAmrap ? ' AMRAP' : '') + (s.rpe ? ` @${s.rpe}` : '') + (s.note ? ` <span style="font-style:italic">(${esc(s.note)})</span>` : '');
             return s.isWarmup ? `<span style="opacity:.6">w ${txt}</span>` : s.isBackoff ? `<span style="color:var(--accent)">↓${txt}</span>` : s.isExtra ? `<span style="color:var(--success)">+${txt}</span>` : txt;
           }).join(', ');
           html += `<div class="text-sm"><span style="color:var(--text)">${ex.name}:</span> <span class="text-dim">${setsStr}</span></div>`;
@@ -2835,15 +3181,15 @@ const CATALOG = [
     { name: 'DB Skullcrusher',         inputType: 'weight_reps', sets: 3, reps: 10,  rir: 1, defaultWeight: 0 },
   ]},
   { cat: 'Kettlebell', exercises: [
-    { name: 'KB Swing (25 lb)',         inputType: 'fixed_weight', sets: 3, reps: 20, rir: null, defaultWeight: 25 },
-    { name: 'KB Swing (49 lb)',         inputType: 'fixed_weight', sets: 3, reps: 15, rir: null, defaultWeight: 49 },
-    { name: 'KB Goblet Squat (25 lb)',  inputType: 'fixed_weight', sets: 3, reps: 12, rir: 3,    defaultWeight: 25 },
-    { name: 'KB Goblet Squat (49 lb)',  inputType: 'fixed_weight', sets: 3, reps: 10, rir: 3,    defaultWeight: 49 },
-    { name: 'KB Clean & Press (25 lb)', inputType: 'fixed_weight', sets: 3, reps: 8,  rir: 2,    defaultWeight: 25 },
-    { name: 'KB Clean & Press (49 lb)', inputType: 'fixed_weight', sets: 3, reps: 6,  rir: 2,    defaultWeight: 49 },
-    { name: 'KB Turkish Get-Up',        inputType: 'fixed_weight', sets: 2, reps: 3,  rir: 2,    defaultWeight: 25 },
-    { name: 'KB Row (25 lb)',           inputType: 'fixed_weight', sets: 3, reps: 12, rir: 2,    defaultWeight: 25 },
-    { name: 'KB Row (49 lb)',           inputType: 'fixed_weight', sets: 3, reps: 10, rir: 2,    defaultWeight: 49 },
+    { name: 'KB Swing (40 lb)',         inputType: 'fixed_weight', sets: 3, reps: 20, rir: null, defaultWeight: 40 },
+    { name: 'KB Swing (60 lb)',         inputType: 'fixed_weight', sets: 3, reps: 15, rir: null, defaultWeight: 60 },
+    { name: 'KB Goblet Squat (40 lb)',  inputType: 'fixed_weight', sets: 3, reps: 12, rir: 3,    defaultWeight: 40 },
+    { name: 'KB Goblet Squat (60 lb)',  inputType: 'fixed_weight', sets: 3, reps: 10, rir: 3,    defaultWeight: 60 },
+    { name: 'KB Clean & Press (40 lb)', inputType: 'fixed_weight', sets: 3, reps: 8,  rir: 2,    defaultWeight: 40 },
+    { name: 'KB Clean & Press (60 lb)', inputType: 'fixed_weight', sets: 3, reps: 6,  rir: 2,    defaultWeight: 60 },
+    { name: 'KB Turkish Get-Up',        inputType: 'fixed_weight', sets: 2, reps: 3,  rir: 2,    defaultWeight: 40 },
+    { name: 'KB Row (40 lb)',           inputType: 'fixed_weight', sets: 3, reps: 12, rir: 2,    defaultWeight: 40 },
+    { name: 'KB Row (60 lb)',           inputType: 'fixed_weight', sets: 3, reps: 10, rir: 2,    defaultWeight: 60 },
   ]},
   { cat: 'Bodyweight', exercises: [
     { name: 'Pullups',                  inputType: 'reps_only', sets: 3, reps: 'max', rir: 2, defaultWeight: 0 },
@@ -2960,6 +3306,7 @@ const App = {
       Workout.data = active;
       Timer.show();
       Timer.start('resting');
+      Workout.restoreActive();
       Nav.current = 'workout';
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.getElementById('page-workout').classList.add('active');
