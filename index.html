@@ -101,8 +101,8 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
 /* Adjust buttons */
 .adj{width:28px;height:28px;border-radius:6px;border:1px solid var(--surface3);background:var(--surface2);color:var(--text);font-size:.9rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .adj:active{background:var(--primary)}
-.band-row{display:flex;align-items:center;gap:6px;padding:6px 0 10px;border-bottom:1px solid var(--surface2);margin-bottom:4px}
-.band-btn{padding:4px 10px;border-radius:6px;border:1px solid var(--surface3);background:var(--surface2);color:var(--dim);font-size:.75rem;cursor:pointer}
+.band-row{display:flex;align-items:center;gap:6px;padding:6px 0 10px;border-bottom:1px solid var(--surface2);margin-bottom:4px;flex-wrap:wrap}
+.band-btn{padding:4px 10px;border-radius:6px;border:1px solid var(--surface3);background:var(--surface2);color:var(--dim);font-size:.75rem;cursor:pointer;white-space:nowrap}
 .band-btn.active{border-color:var(--primary);color:var(--text);background:var(--surface3)}
 .band-btn.green.active{border-color:#06d6a0;color:#06d6a0}
 .band-btn.black.active{border-color:#888;color:#ccc}
@@ -258,6 +258,8 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
     <div class="input-group"><label>Bench</label><input type="number" id="set-bench" step="5"></div>
     <div class="input-group"><label>Deadlift</label><input type="number" id="set-deadlift" step="5"></div>
     <div class="input-group"><label>Bodyweight</label><input type="number" id="set-bw" step="1"></div>
+    <div class="row gap-8"><div class="input-group flex-1"><label>Green band assist (lb)</label><input type="number" id="set-band-green" step="5"></div>
+      <div class="input-group flex-1"><label>Black band assist (lb)</label><input type="number" id="set-band-black" step="5"></div></div>
     <div class="input-group"><label>Ease-in (lighter first weeks)</label>
       <select id="set-ramp">
         <option value="0">Off: full program loads</option>
@@ -351,7 +353,7 @@ if (location.hostname.endsWith('github.io')) location.replace('https://ph3.azure
 // ===================== STORAGE =====================
 // localStorage is the working copy (so the app works offline in the gym);
 // every change is pushed to the server, which is the copy that lasts.
-const SYNC_KEYS = ['profile', 'program', 'workouts', 'cardio', 'activeWorkout', 'stravaGym'];
+const SYNC_KEYS = ['profile', 'program', 'workouts', 'cardio', 'activeWorkout', 'stravaGym', 'pushups'];
 const Store = {
   get(k, def) {
     try { const v = localStorage.getItem('ph3_' + k); if (!v) return def; const p = JSON.parse(v); return p ?? def; }
@@ -369,6 +371,7 @@ const Store = {
       cardio: Store.get('cardio', []),
       stravaGym: Store.get('stravaGym', []),
       activeWorkout: Store.get('activeWorkout', null),
+      pushups: Store.get('pushups', []),
     };
   }
 };
@@ -675,6 +678,15 @@ function weekStart(dateStr) {
   d.setDate(d.getDate() - (d.getDay() + 6) % 7);
   return localDate(d);
 }
+// Pull-up assistance bands (Rogue Monster Bands; Rogue lists #3 green 40 lb,
+// #4 black 65 lb). Editable in Settings. 'both' = green + black together.
+const BAND_DEFAULTS = { green: 40, black: 65 };
+function bandLbs() { return { ...BAND_DEFAULTS, ...((Store.get('profile', {}) || {}).bands || {}) }; }
+function bandAssist(band) {
+  const b = bandLbs();
+  return band === 'green' ? b.green : band === 'black' ? b.black : band === 'both' ? b.green + b.black : 0;
+}
+function bodyweight() { return (Store.get('profile', {}) || {}).bodyweight || 230; }
 function addDays(dateStr, n) { const d = parseLocal(dateStr); d.setDate(d.getDate() + n); return localDate(d); }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
 // Small message at the bottom with an optional action button; goes away after 8 s.
@@ -1034,6 +1046,8 @@ const Home = {
       ${Cardio.weekCard(true)}
     </div>`;
 
+    html += Pushups.homeCard();
+
     // Rest discipline from recent workouts
     const scored = workouts.map(workoutRest).filter(Boolean).slice(-6);
     if (scored.length) {
@@ -1068,6 +1082,45 @@ const Home = {
     Store.set('program', prog);
     this.render();
   }
+};
+
+// ===================== PUSHUPS =====================
+// Bodyweight pushups done any time (office, between meetings). Logged with one
+// tap from Home; separate from workouts, so they don't count as a lift.
+const Pushups = {
+  CHOICES: [10, 15, 20, 25],
+  list() { return Store.get('pushups', []); },
+  add(n) {
+    n = parseInt(n);
+    if (!(n > 0)) return;
+    const l = this.list();
+    l.push({ at: Date.now(), date: localDate(), reps: n });
+    Store.set('pushups', l);
+    Home.render();
+    toast(`+${n} pushups`, 'Undo', () => Pushups.undo());
+  },
+  other() { const n = prompt('How many pushups?'); if (n != null) this.add(n); },
+  undo() {
+    const l = this.list();
+    if (!l.length) return;
+    l.pop();
+    Store.set('pushups', l);
+    Home.render();
+  },
+  stats() {
+    const today = localDate(), ws = weekStart(today), l = this.list();
+    const sum = a => a.reduce((t, x) => t + x.reps, 0);
+    const t = l.filter(x => x.date === today), w = l.filter(x => x.date >= ws);
+    return { today: sum(t), todaySets: t.length, week: sum(w), weekSets: w.length };
+  },
+  homeCard() {
+    const st = this.stats();
+    return `<div class="card">
+      <div class="row" style="align-items:baseline"><div class="card-title" style="flex:1;margin:0">Pushups</div>
+        <span class="text-sm text-dim">Today <strong style="color:var(--text)">${st.today}</strong>${st.todaySets > 1 ? ` (${st.todaySets} sets)` : ''} · week <strong style="color:var(--text)">${st.week}</strong></span></div>
+      <div class="row gap-8 mt-8" style="flex-wrap:wrap">${this.CHOICES.map(n => `<button class="band-btn" style="padding:8px 12px" onclick="Pushups.add(${n})">+${n}</button>`).join('')}<button class="band-btn" style="padding:8px 12px" onclick="Pushups.other()">Other</button></div>
+    </div>`;
+  },
 };
 
 // ===================== SESSION PLANNER =====================
@@ -1166,6 +1219,11 @@ const Planner = {
     const done = new Set();
     for (let i = workouts.length - 1; i >= 0; i--) {
       (workouts[i].exercises || []).forEach(prevEx => {
+        // Pull-ups: start with the band you used last time.
+        if (prevEx.name === 'Pullups' && !done.has('band')) {
+          exercises.forEach(c => { if (c.name === 'Pullups') c.band = prevEx.band || 'none'; });
+          done.add('band');
+        }
         const last = (prevEx.sets || []).find(s => s.actualWeight > 0);
         if (!last) return;
         exercises.forEach(curEx => {
@@ -1181,7 +1239,8 @@ const Planner = {
   // Full exercise-by-exercise list for the Home "Preview" toggle.
   previewHtml(plan) {
     const exs = this.applyPreviousWeights(plan.exercises);
-    const lb = w => w ? `${w} lb` : 'BW';
+    const lb = (w, ex) => w ? `${w} lb` : ex.name === 'Pullups'
+      ? (ex.band && ex.band !== 'none' ? `${bodyweight() - bandAssist(ex.band)} lb` : `BW ${bodyweight()}`) : 'BW';
     return `<div class="mt-8" style="border-top:1px solid var(--surface2);padding-top:8px">` + exs.map(ex => {
       const work = ex.sets.filter(s => !s.isWarmup);
       const warm = ex.sets.filter(s => s.isWarmup);
@@ -1193,9 +1252,10 @@ const Planner = {
       if (work.some(s => s.isAmrap)) detail.push('last set AMRAP');
       if (ex.rir != null) detail.push(`${ex.rir} RIR`);
       if (ex.note) detail.push(ex.note);
+      if (ex.band && ex.band !== 'none') detail.push(`${ex.band === 'both' ? 'green + black' : ex.band} band (last time)`);
       if (ex.cutForTime) detail.push('<span style="color:var(--warning)">cut for time</span>');
       return `<div class="mb-8" style="${ex.cutForTime ? 'opacity:.55' : ''}">
-        <div class="row"><span style="flex:1">${ex.name}</span><span style="font-weight:700">${lb(s0.goalWeight)}</span><span class="text-dim" style="min-width:70px;text-align:right;white-space:nowrap;padding-left:8px">${new Set(work.map(s => s.goalReps)).size > 1 ? work.map(s => s.goalReps).join('/') : `${work.length}×${s0.goalReps}`}</span></div>
+        <div class="row"><span style="flex:1">${ex.name}</span><span style="font-weight:700">${lb(s0.goalWeight, ex)}</span><span class="text-dim" style="min-width:70px;text-align:right;white-space:nowrap;padding-left:8px">${new Set(work.map(s => s.goalReps)).size > 1 ? work.map(s => s.goalReps).join('/') : `${work.length}×${s0.goalReps}`}</span></div>
         ${detail.length ? `<div class="text-sm text-dim">${detail.join(' · ')}</div>` : ''}
       </div>`;
     }).join('') + `</div>`;
@@ -1584,15 +1644,16 @@ const Workout = {
       }
 
       if (ex.name === 'Pullups') {
-        const bw = Store.get('profile', {}).bodyweight || 245;
+        const bw = bodyweight();
         const band = ex.band || 'none';
-        const assist = band === 'green' ? 40 : band === 'black' ? 65 : 0;
-        const effective = bw - assist;
+        const effective = bw - bandAssist(band);
+        const bl = bandLbs();
         html += `<div class="band-row">
           <span class="text-dim text-sm">Band:</span>
           <button class="band-btn ${band === 'none' ? 'active' : ''}" onclick="Workout.setBand(${ei},'none')">None</button>
-          <button class="band-btn green ${band === 'green' ? 'active' : ''}" onclick="Workout.setBand(${ei},'green')">Green</button>
-          <button class="band-btn black ${band === 'black' ? 'active' : ''}" onclick="Workout.setBand(${ei},'black')">Black</button>
+          <button class="band-btn green ${band === 'green' ? 'active' : ''}" onclick="Workout.setBand(${ei},'green')">Green −${bl.green}</button>
+          <button class="band-btn black ${band === 'black' ? 'active' : ''}" onclick="Workout.setBand(${ei},'black')">Black −${bl.black}</button>
+          <button class="band-btn ${band === 'both' ? 'active' : ''}" onclick="Workout.setBand(${ei},'both')">Both</button>
           <span class="text-dim text-sm" style="margin-left:auto">${effective} lb eff.</span>
         </div>`;
       }
@@ -3138,6 +3199,9 @@ const Settings = {
     document.getElementById('set-bench').value = maxes.bench;
     document.getElementById('set-deadlift').value = maxes.deadlift;
     document.getElementById('set-bw').value = profile.bodyweight || 230;
+    const bl = bandLbs();
+    document.getElementById('set-band-green').value = bl.green;
+    document.getElementById('set-band-black').value = bl.black;
     document.getElementById('set-nudge').value = profile.nudge || 120;
     document.getElementById('set-ramp').value = String(prog.ramp || 0);
     const fs = Planner.fillSets();
@@ -3183,6 +3247,10 @@ const Settings = {
     Store.set('program', prog);
     const profile = Store.get('profile', {}) || {};
     profile.bodyweight = parseInt(document.getElementById('set-bw').value) || 230;
+    profile.bands = {
+      green: parseInt(document.getElementById('set-band-green').value) || BAND_DEFAULTS.green,
+      black: parseInt(document.getElementById('set-band-black').value) || BAND_DEFAULTS.black,
+    };
     Store.set('profile', profile);
     alert('Maxes updated!');
   },
@@ -3233,6 +3301,7 @@ const Settings = {
         if (data.workouts) Store.set('workouts', data.workouts);
         if (data.cardio) Store.set('cardio', data.cardio);
         if (data.stravaGym) Store.set('stravaGym', data.stravaGym);
+        if (data.pushups) Store.set('pushups', data.pushups);
         alert('Data imported!');
         Nav.go('home');
       } catch {
