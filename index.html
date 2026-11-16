@@ -1246,7 +1246,7 @@ const Progress = {
   cardioNudge() {
     const ws = weekStart(localDate()), p = Cardio.prefs(ws), st = Cardio.weekStats(ws);
     const z2Left = Math.max(0, p.z2Goal - st.z2), hardLeft = Math.max(0, p.hardGoal - st.hard);
-    const z2Min = z2Left ? Math.min(45, Math.max(20, Math.ceil(z2Left / 5) * 5)) : 30;
+    const blk = Cardio.Z2_BLOCK, z2Min = z2Left ? Math.min(60, Math.max(blk, Math.ceil(z2Left / 5) * 5)) : blk;
     const need = [z2Left ? `${z2Left} min Zone 2` : '', hardLeft ? `${hardLeft} hard session${hardLeft === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ');
     const btn = (label, js) => `<button class="band-btn" style="padding:8px 10px" onclick="${js}">${label}</button>`;
     return `<div style="border-top:1px solid var(--surface2);margin-top:10px;padding-top:10px">
@@ -2309,7 +2309,21 @@ const Cardio = {
   },
   // Pace through the week: where you'd be by end of today if spread evenly.
   // Never prescribes a day; just flags when you're falling behind.
+  // Zone 2 comes in real blocks (Attia-style, 45+ min), not a daily trickle:
+  // pace it as "blocks left vs days left", never as minutes per day.
+  Z2_BLOCK: 45,
+  z2Pace(done, goal) {
+    if (done >= goal) return '<span style="color:var(--success)">Done for the week</span>';
+    const daysLeft = 7 - daysSince(weekStart(localDate())); // including today
+    const left = goal - done, blocks = Math.ceil(left / this.Z2_BLOCK);
+    const need = `${left} min left · ${blocks} block${blocks === 1 ? '' : 's'} of ${this.Z2_BLOCK}+ min · ${daysLeft} day${daysLeft === 1 ? '' : 's'} to go`;
+    if (this._warm) return `<span class="text-dim">${need}</span>`;
+    if (blocks > daysLeft) return `<span style="color:var(--danger)">${need}</span>`;
+    if (blocks > Math.ceil(daysLeft / 2)) return `<span style="color:var(--warning)">Getting tight · ${need}</span>`;
+    return `<span class="text-dim">On pace · ${need}</span>`;
+  },
   pace(done, goal, unit) {
+    if (unit === 'min') return this.z2Pace(done, goal);
     if (this._warm && done < goal) return '<span class="text-dim">Warm-up week: pacing starts Monday</span>';
     const dayIdx = daysSince(weekStart(localDate())); // 0 = Monday
     const daysLeft = 6 - dayIdx;                      // after today
