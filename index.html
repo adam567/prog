@@ -74,18 +74,19 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
 .ex-body{padding:0 12px 14px}
 .set-row{display:flex;align-items:center;gap:4px;padding:8px 0;border-bottom:1px solid var(--surface2)}
 .set-row:last-child{border:none}
-.set-label{width:36px;font-size:.75rem;color:var(--dim);flex-shrink:0}
-.set-goal{font-size:.7rem;color:var(--dim);width:32px;flex-shrink:0;line-height:1.1}
+.set-label{width:36px;font-size:.85rem;color:var(--dim);flex-shrink:0}
+.set-goal{font-size:.8rem;color:var(--dim);width:36px;flex-shrink:0;line-height:1.1}
 .set-actual{display:flex;align-items:center;gap:2px;flex:1;min-width:0}
-.set-actual input{width:40px;padding:4px 1px;text-align:center;font-size:.85rem}
+.set-actual input{width:44px;padding:6px 1px;text-align:center;font-size:1rem}
 .set-actual .x{color:var(--dim);font-size:.85rem}
-.set-check{width:32px;height:32px;border-radius:8px;border:2px solid var(--surface3);background:transparent;color:var(--dim);font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.set-check{width:54px;height:54px;border-radius:12px;border:2px solid var(--surface3);background:transparent;color:var(--dim);font-size:1.6rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .set-check.done{background:var(--success);border-color:var(--success);color:#000}
 .set-check.amrap-done{background:var(--warning);border-color:var(--warning);color:#000}
-.set-check.countdown{background:var(--warning);border-color:var(--warning);color:#000;font-size:.85rem;font-weight:700}
-.set-check.timing{background:var(--accent);border-color:var(--accent);color:#fff;font-size:.65rem;font-weight:700}
-.set-tut{font-size:.65rem;color:var(--dim);text-align:center;width:32px;flex-shrink:0}
+.set-check.countdown{background:var(--warning);border-color:var(--warning);color:#000;font-size:1.3rem;font-weight:700}
+.set-check.timing{background:var(--accent);border-color:var(--accent);color:#fff;font-size:1.4rem;font-weight:700}
+.set-tut{font-size:.8rem;color:var(--dim);text-align:center;width:54px;flex-shrink:0}
 .set-check.locked{opacity:.3}
+@media (max-width:390px){.set-actual input{width:38px}.adj{width:24px}.set-check{width:48px;height:48px}.set-tut{width:48px}.set-goal{width:30px}.set-label{width:32px}}
 .set-note{font-size:.7rem;color:var(--dim);margin:-4px 0 6px 40px}
 #set-bar{position:fixed;left:12px;right:12px;bottom:76px;z-index:300;border:none;border-radius:14px;padding:16px;font-size:1.15rem;font-weight:700;color:#fff;background:var(--accent);box-shadow:0 4px 20px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer}
 #set-bar.countdown{background:var(--warning);color:#000}
@@ -1535,7 +1536,7 @@ const Workout = {
                 ? `<button class="set-check ${this.activeSet.startTime ? 'timing' : 'countdown'}" id="tut-btn" onclick="Workout.tapActive()">${this.activeSet.startTime ? '■' : '…'}</button>
                    <div class="set-tut" id="tut-live">${this.activeSet.startTime ? '' : 'ready'}</div>`
                 : `<button class="set-check ${this.activeSet || (this.emom && this.emom.ei !== ei) ? 'locked' : ''}" onclick="Workout.startSet(${ei},${si})">▶</button>
-                   <button style="font-size:.6rem;color:var(--primary);background:none;border:none;cursor:pointer;padding:2px" onclick="event.stopPropagation();Workout.backfillSet(${ei},${si})">done</button>`
+                   <button style="font-size:.8rem;color:var(--primary);background:none;border:none;cursor:pointer;padding:4px 6px" onclick="event.stopPropagation();Workout.backfillSet(${ei},${si})">done</button>`
             }
           </div>
         </div>${s.note ? `<div class="set-note">${esc(s.note)}</div>` : ''}`;
