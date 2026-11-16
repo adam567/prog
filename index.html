@@ -2894,7 +2894,9 @@ const Cardio = {
           ${c.maxHr ? `<div class="text-sm text-dim">max ${c.maxHr}</div>` : ''}
         </div>
       </div>
+      ${c.stravaId ? Terrain.html(c) : ''}
       <div class="actions">
+        ${c.stravaId ? `<button class="btn btn-outline btn-xs" onclick="Terrain.toggle('${c.id}')">${Terrain.open[c.id] ? 'Hide terrain' : 'Terrain + HR'}</button>` : ''}
         <button class="btn btn-outline btn-xs" onclick="Cardio.edit('${c.id}')">Edit</button>
         <button class="btn btn-outline btn-xs" onclick="Cardio.remove('${c.id}')">Delete</button>
       </div>
@@ -2981,6 +2983,125 @@ const BadNight = {
     profile.restDays = (profile.restDays || []).filter(d => d !== localDate());
     Store.set('profile', profile);
     Home.render();
+  },
+};
+
+// ===================== TERRAIN + HEART RATE =====================
+// For a Strava activity: elevation profile and heart rate on one shared
+// distance axis (two stacked charts, never two y-scales), with each stretch
+// marked below / in / above Zone 2, so you can see which hill (or which flat
+// stretch) moved you out of zone.
+const Terrain = {
+  open: {}, data: {}, hover: {},
+  toggle(id) {
+    this.open[id] = !this.open[id];
+    if (this.open[id] && !this.data[id]) this.load(id);
+    Cardio.render();
+  },
+  async load(id) {
+    const c = Cardio.list().find(x => x.id === id);
+    this.data[id] = { loading: true };
+    try {
+      const r = await Sync.api('GET', '/api/strava/terrain/' + c.stravaId);
+      const j = await r.json();
+      this.data[id] = r.ok && !j.error ? this.prep(j) : { error: j.error || 'Could not load from Strava' };
+    } catch { this.data[id] = { error: navigator.onLine ? 'Could not load from Strava' : 'Offline' }; }
+    if (Nav.current === 'cardio') Cardio.render();
+  },
+  // Downsample to ~250 points by distance; keep seconds per point for time splits.
+  prep(s) {
+    const d = s.distance || [], t = s.time || [], alt = s.altitude || [], hr = s.heartrate || [], g = s.grade_smooth || [];
+    if (!d.length || !alt.length) return { error: 'No GPS/elevation for this activity' };
+    const total = d[d.length - 1] / 1609.34, N = Math.min(250, d.length), step = total / N;
+    const pts = [];
+    let j = 0;
+    for (let k = 0; k < N; k++) {
+      const lo = k * step, hi = lo + step, acc = { a: 0, h: 0, hn: 0, g: 0, n: 0, sec: 0 };
+      while (j < d.length && d[j] / 1609.34 < hi) {
+        acc.a += alt[j]; acc.g += g[j] || 0; acc.n++;
+        if (hr[j]) { acc.h += hr[j]; acc.hn++; }
+        if (j > 0) acc.sec += Math.min(Math.max(t[j] - t[j - 1], 0), 10);
+        j++;
+      }
+      if (acc.n) pts.push({ mi: lo + step / 2, ft: acc.a / acc.n * 3.281, hr: acc.hn ? acc.h / acc.hn : null, grade: acc.g / acc.n, sec: acc.sec, min: (t[Math.max(0, j - 1)] || 0) / 60 });
+    }
+    let gain = 0; for (let i = 1; i < alt.length; i++) gain += Math.max(0, alt[i] - alt[i - 1]);
+    return { pts, total, gain: Math.round(gain * 3.281), hasHr: hr.length > 0 };
+  },
+  zone(h, p) { return h == null ? 'none' : h < p.z2Low ? 'below' : h > p.z2High ? 'above' : 'in'; },
+  COLORS: { below: 'var(--primary)', in: 'var(--success)', above: 'var(--warning)', none: 'var(--surface3)' },
+  html(c) {
+    if (!this.open[c.id]) return '';
+    const D = this.data[c.id];
+    if (!D || D.loading) return `<div class="text-sm text-dim mt-8">Loading elevation and heart rate from Strava…</div>`;
+    if (D.error) return `<div class="text-sm mt-8" style="color:var(--danger)">${esc(D.error)}</div>`;
+    return `<div id="terrain-${c.id}" class="mt-8">${this.chart(c.id)}</div>`;
+  },
+  chart(id) {
+    const D = this.data[id], P = D.pts, pr = Cardio.prefsBase();
+    const W = 320, L = 34, R = 8, H1 = 90, H2 = 90, STRIP = 8, GAP = 6;
+    const x = mi => L + (W - L - R) * (mi / D.total);
+    const ftLo = Math.floor(Math.min(...P.map(p => p.ft)) / 10) * 10, ftHi = Math.ceil(Math.max(...P.map(p => p.ft)) / 10) * 10 + 10;
+    const yE = f => 6 + (H1 - 12) * (1 - (f - ftLo) / (ftHi - ftLo));
+    const hrs = P.filter(p => p.hr).map(p => p.hr);
+    const hLo = Math.min(pr.z2Low - 10, ...hrs) - 2, hHi = Math.max(pr.z2High + 10, ...hrs) + 2;
+    const top2 = H1 + STRIP + GAP * 2;
+    const yH = h => top2 + 4 + (H2 - 8) * (1 - (h - hLo) / (hHi - hLo));
+    const axis = (y, v) => `<line x1="${L}" x2="${W - R}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" stroke="var(--surface2)"/><text x="${L - 4}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--dim)">${v}</text>`;
+    // Elevation (area)
+    const area = `M${x(P[0].mi).toFixed(1)},${yE(ftLo).toFixed(1)} ` + P.map(p => `L${x(p.mi).toFixed(1)},${yE(p.ft).toFixed(1)}`).join(' ') + ` L${x(P[P.length - 1].mi).toFixed(1)},${yE(ftLo).toFixed(1)} Z`;
+    let svg = [ftLo, Math.round((ftLo + ftHi) / 20) * 10, ftHi].map(v => axis(yE(v), v)).join('');
+    svg += `<path d="${area}" fill="var(--surface3)" stroke="var(--dim)" stroke-width="1.5" stroke-linejoin="round"/>`;
+    svg += `<text x="${W - R}" y="12" text-anchor="end" font-size="9" fill="var(--dim)">elevation, ft</text>`;
+    // Zone strip under the elevation profile
+    const sy = H1 + GAP;
+    if (D.hasHr) P.forEach((p, i) => {
+      const x0 = x(i ? (P[i - 1].mi + p.mi) / 2 : 0), x1 = x(i < P.length - 1 ? (p.mi + P[i + 1].mi) / 2 : D.total);
+      svg += `<rect x="${x0.toFixed(1)}" y="${sy}" width="${Math.max(0.5, x1 - x0).toFixed(1)}" height="${STRIP}" fill="${this.COLORS[this.zone(p.hr, pr)]}"/>`;
+    });
+    // Heart rate with the Zone 2 band
+    if (D.hasHr) {
+      svg += `<rect x="${L}" y="${yH(pr.z2High).toFixed(1)}" width="${W - L - R}" height="${(yH(pr.z2Low) - yH(pr.z2High)).toFixed(1)}" fill="var(--success)" opacity=".12"/>`;
+      svg += [pr.z2Low, pr.z2High].map(v => axis(yH(v), v)).join('');
+      svg += `<polyline points="${P.filter(p => p.hr).map(p => `${x(p.mi).toFixed(1)},${yH(p.hr).toFixed(1)}`).join(' ')}" fill="none" stroke="var(--text)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+      svg += `<text x="${W - R}" y="${top2 + 12}" text-anchor="end" font-size="9" fill="var(--dim)">heart rate, bpm</text>`;
+    }
+    const Hall = D.hasHr ? top2 + H2 + 16 : H1 + 16;
+    svg += `<text x="${L}" y="${Hall - 3}" font-size="9" fill="var(--dim)">0</text><text x="${W - R}" y="${Hall - 3}" text-anchor="end" font-size="9" fill="var(--dim)">${D.total.toFixed(2)} mi</text>`;
+    // Crosshair
+    const hi = this.hover[id], hp = hi != null ? P[hi] : null;
+    let read = '<span class="text-dim">Tap or drag across the chart to read a spot</span>';
+    if (hp) {
+      svg += `<line x1="${x(hp.mi).toFixed(1)}" x2="${x(hp.mi).toFixed(1)}" y1="4" y2="${Hall - 14}" stroke="var(--text)" stroke-width="1" stroke-dasharray="3 3"/>`;
+      svg += `<circle cx="${x(hp.mi).toFixed(1)}" cy="${yE(hp.ft).toFixed(1)}" r="4" fill="var(--text)" stroke="var(--surface)" stroke-width="2"/>`;
+      if (hp.hr) svg += `<circle cx="${x(hp.mi).toFixed(1)}" cy="${yH(hp.hr).toFixed(1)}" r="4" fill="var(--text)" stroke="var(--surface)" stroke-width="2"/>`;
+      const z = this.zone(hp.hr, pr);
+      read = `${hp.mi.toFixed(2)} mi · ${Math.round(hp.min)} min · ${Math.round(hp.ft)} ft · grade ${hp.grade > 0 ? '+' : ''}${hp.grade.toFixed(1)}%${hp.hr ? ` · <strong>${Math.round(hp.hr)} bpm</strong> (${z === 'in' ? 'in Z2' : z + ' Z2'})` : ''}`;
+    }
+    // Time split
+    let split = '';
+    if (D.hasHr) {
+      const t = { below: 0, in: 0, above: 0 };
+      P.forEach(p => { const z = this.zone(p.hr, pr); if (t[z] != null) t[z] += p.sec; });
+      const tot = t.below + t.in + t.above || 1, f = k => `${Math.round(t[k] / 60)} min (${Math.round(100 * t[k] / tot)}%)`;
+      const key = k => `<svg width="10" height="10"><rect width="10" height="10" rx="2" fill="${this.COLORS[k]}"/></svg>`;
+      split = `<div class="text-sm mt-8">${key('below')} below Z2 ${f('below')} · ${key('in')} in Z2 ${f('in')} · ${key('above')} above Z2 ${f('above')}</div>`;
+    }
+    this._x = this._x || {}; this._x[id] = P.map(p => x(p.mi) / W);
+    return `<svg viewBox="0 0 ${W} ${Hall}" style="width:100%;height:auto;touch-action:pan-y" role="img" aria-label="Elevation and heart rate by distance" onpointermove="Terrain.pick(event,this,'${id}')" onclick="Terrain.pick(event,this,'${id}')">${svg}</svg>
+      <div class="text-sm" style="min-height:1.3em">${read}</div>
+      <div class="text-sm text-dim">${D.total.toFixed(2)} mi · ${D.gain} ft climbed · Z2 ${pr.z2Low}–${pr.z2High} bpm${D.hasHr ? '' : ' · no heart rate recorded'}</div>${split}`;
+  },
+  pick(ev, svg, id) {
+    const xs = (this._x || {})[id];
+    if (!xs || !xs.length) return;
+    const r = svg.getBoundingClientRect(), fx = (ev.clientX - r.left) / r.width;
+    let best = 0;
+    xs.forEach((p, i) => { if (Math.abs(p - fx) < Math.abs(xs[best] - fx)) best = i; });
+    if (best === this.hover[id]) return;
+    this.hover[id] = best;
+    const el = document.getElementById('terrain-' + id);
+    if (el) el.innerHTML = this.chart(id);
   },
 };
 
