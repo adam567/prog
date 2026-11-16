@@ -736,6 +736,44 @@ function totalDays() {
   return BLOCKS.reduce((sum, b) => sum + b.weeks * 4, 0);
 }
 
+// Rest discipline from set timestamps. A gap between two sets of the same
+// exercise is a rest and is scored against the limit; a gap between different
+// exercises is a changeover (strip, re-rack, move the bench) and isn't.
+// Returns null when too few sets were timed to say anything.
+function restStats(exercises, limit) {
+  limit = limit || (Store.get('profile', {}) || {}).nudge || 120;
+  const sets = [];
+  (exercises || []).forEach((ex, ei) => (ex.sets || []).forEach(s => {
+    if (s.done && s.startedAt && s.endedAt) sets.push({ ei, start: s.startedAt, end: s.endedAt });
+  }));
+  if (sets.length < 2) return null;
+  sets.sort((a, b) => a.start - b.start);
+  const rests = [], changes = [];
+  for (let i = 1; i < sets.length; i++) {
+    const gap = Math.round((sets[i].start - sets[i - 1].end) / 1000);
+    if (gap <= 0) continue;
+    (sets[i].ei === sets[i - 1].ei ? rests : changes).push(gap);
+  }
+  if (!rests.length) return null;
+  const restOver = rests.filter(g => g > limit).length;
+  return {
+    restPeriods: rests.length, restOver,
+    avgRest: Math.round(rests.reduce((a, b) => a + b, 0) / rests.length),
+    maxRest: Math.max(...rests),
+    onTimePct: Math.round(100 * (rests.length - restOver) / rests.length),
+    changeovers: changes.length,
+    avgChangeover: changes.length ? Math.round(changes.reduce((a, b) => a + b, 0) / changes.length) : 0,
+    limit,
+  };
+}
+// A saved workout's rest stats: recomputed from its sets when they were
+// timed (so older workouts drop their changeovers too), else as stored.
+function workoutRest(w) {
+  const t = w.timer || {};
+  const r = restStats(w.exercises, t.limit);
+  return r ? { ...t, ...r } : (t.restPeriods ? t : null);
+}
+
 // ===================== TIMER =====================
 const Timer = {
   state: 'idle', // idle, working, resting
@@ -767,7 +805,7 @@ const Timer = {
       if (this.seconds % 15 === 0 && typeof Workout !== 'undefined') Workout.updateClock();
       if (this.state === 'resting') {
         const nudge = Store.get('profile', {}).nudge || 120;
-        if (this.seconds >= nudge) {
+        if (this.seconds >= nudge && !(typeof Workout !== 'undefined' && Workout.inChangeover())) {
           // Buzz at the limit, then every 30 s until the next set starts.
           const n = Math.floor((this.seconds - nudge) / 30);
           if (n !== this.lastNudge) {
@@ -828,7 +866,11 @@ const Timer = {
     const maxRest = rest.length ? Math.max(...rest.map(p => p.duration)) : 0;
     const restOver = rest.filter(p => p.duration > (Store.get('profile', {}).nudge || 120)).length;
     const onTimePct = rest.length ? Math.round(100 * (rest.length - restOver) / rest.length) : null;
-    return { totalWork, totalRest, avgRest, maxRest, restPeriods: rest.length, workPeriods: work.length, restOver, onTimePct, limit: Store.get('profile', {}).nudge || 120 };
+    const out = { totalWork, totalRest, avgRest, maxRest, restPeriods: rest.length, workPeriods: work.length, restOver, onTimePct, limit: Store.get('profile', {}).nudge || 120 };
+    // Prefer rests measured from the sets themselves: they know which exercise
+    // each set belongs to, so changeovers between exercises aren't scored.
+    const bySets = typeof Workout !== 'undefined' && Workout.data ? restStats(Workout.data.exercises, out.limit) : null;
+    return bySets ? { ...out, ...bySets } : out;
   },
 
   updateUI() {
@@ -850,6 +892,11 @@ const Timer = {
     } else if (this.state === 'working') {
       bar.classList.add('working');
       txt.textContent = 'WORKING ' + fmtTime(this.seconds);
+      sub.textContent = accumText;
+    } else if (this.state === 'resting' && typeof Workout !== 'undefined' && Workout.inChangeover()) {
+      // Between exercises: no limit, no nag.
+      bar.classList.add('resting');
+      txt.textContent = 'CHANGEOVER ' + fmtTime(this.seconds);
       sub.textContent = accumText;
     } else if (this.state === 'resting') {
       if (this.seconds >= nudge) {
@@ -943,7 +990,8 @@ const Home = {
       html += `<div class="text-sm text-dim mt-8 mb-8">Time today</div>
         <div class="row gap-8" style="flex-wrap:wrap">${Planner.CHOICES.map(m => `<button class="band-btn ${this.minutes === m ? 'active' : ''}" style="padding:6px 10px;font-size:.85rem" onclick="Home.setMinutes(${m})">${Planner.label(m)}</button>`).join('')}</div>
         <div class="text-sm mt-8">${Planner.summary(plan)}</div>
-        <div class="text-sm text-dim mt-8">${this.minutes === -1 ? `As written: ~${plan.estMin} min` : `Plan ~${plan.estMin} min · as written ~${plan.fullMin} min`}</div>`;
+        <div class="row mt-8" style="align-items:center"><span class="text-sm text-dim" style="flex:1">${this.minutes === -1 ? `As written: ~${plan.estMin} min` : `Plan ~${plan.estMin} min · as written ~${plan.fullMin} min`}</span><button class="btn-xs btn-outline" onclick="Home.togglePreview()">${this.preview ? 'Hide' : 'Preview'}</button></div>
+        ${this.preview ? Planner.previewHtml(plan) : ''}`;
 
       const canStart = !prog.blockMaxes || prog.blockMaxes[block] || block === 0;
       html += `<button class="btn btn-success mt-16" ${canStart ? '' : 'disabled style="opacity:.4"'} onclick="Workout.start()">Start Workout (~${plan.estMin} min)</button>`;
@@ -981,14 +1029,15 @@ const Home = {
     </div>`;
 
     // Rest discipline from recent workouts
-    const scored = workouts.filter(w => w.timer && w.timer.restPeriods).slice(-6);
+    const scored = workouts.map(workoutRest).filter(Boolean).slice(-6);
     if (scored.length) {
-      const last = scored[scored.length - 1].timer;
+      const last = scored[scored.length - 1];
       const pctOf = t => t.onTimePct ?? Math.round(100 * (t.restPeriods - t.restOver) / t.restPeriods);
       html += `<div class="card">
         <div class="card-title">Rest discipline</div>
         <div class="text-sm">Last workout: <strong>${last.restPeriods - last.restOver} of ${last.restPeriods}</strong> rests on time (${pctOf(last)}%) · avg ${fmtTime(last.avgRest)} · longest ${fmtTime(last.maxRest)}</div>
-        ${scored.length > 1 ? `<div class="text-sm text-dim mt-8">Recent: ${scored.map(w => pctOf(w.timer) + '%').join(' → ')}</div>` : ''}
+        ${last.changeovers ? `<div class="text-sm text-dim mt-8">Not counted: ${last.changeovers} changeover${last.changeovers === 1 ? '' : 's'} between exercises (avg ${fmtTime(last.avgChangeover)})</div>` : ''}
+        ${scored.length > 1 ? `<div class="text-sm text-dim mt-8">Recent: ${scored.map(t => pctOf(t) + '%').join(' → ')}</div>` : ''}
       </div>`;
     }
 
@@ -1002,6 +1051,8 @@ const Home = {
   // Time choice applies to the next session only; every day starts on "Program".
   minutes: -1,
   setMinutes(m) { this.minutes = m; this.render(); },
+  preview: false,
+  togglePreview() { this.preview = !this.preview; this.render(); },
 
   swapNext() {
     const prog = Store.get('program', {});
@@ -1097,6 +1148,48 @@ const Planner = {
       kept: order.filter(a => keep.has(a)).map(a => a.name),
       estMin: Math.round(used * f / 60), fullMin: Math.round(fullSec * f / 60),
     };
+  },
+
+  // Accessory weights carry over from the most recent workout that logged them.
+  applyPreviousWeights(exercises) {
+    const workouts = Store.get('workouts', []);
+    const done = new Set();
+    for (let i = workouts.length - 1; i >= 0; i--) {
+      (workouts[i].exercises || []).forEach(prevEx => {
+        if (done.has(prevEx.name)) return;
+        const last = (prevEx.sets || []).find(s => s.actualWeight > 0);
+        if (!last) return;
+        exercises.forEach(curEx => {
+          if (curEx.isMain || curEx.name !== prevEx.name) return;
+          curEx.sets.forEach(s => { s.goalWeight = last.actualWeight; s.actualWeight = last.actualWeight; });
+          done.add(prevEx.name);
+        });
+      });
+    }
+    return exercises;
+  },
+
+  // Full exercise-by-exercise list for the Home "Preview" toggle.
+  previewHtml(plan) {
+    const exs = this.applyPreviousWeights(plan.exercises);
+    const lb = w => w ? `${w} lb` : 'BW';
+    return `<div class="mt-8" style="border-top:1px solid var(--surface2);padding-top:8px">` + exs.map(ex => {
+      const work = ex.sets.filter(s => !s.isWarmup);
+      const warm = ex.sets.filter(s => s.isWarmup);
+      const extra = work.filter(s => s.isExtra).length;
+      const s0 = work[0] || {};
+      const detail = [];
+      if (warm.length) detail.push('warm-up ' + warm.map(s => `${s.goalWeight}×${s.goalReps}`).join(', '));
+      if (extra) detail.push(`incl. +${extra} extra`);
+      if (work.some(s => s.isAmrap)) detail.push('last set AMRAP');
+      if (ex.rir != null) detail.push(`${ex.rir} RIR`);
+      if (ex.note) detail.push(ex.note);
+      if (ex.cutForTime) detail.push('<span style="color:var(--warning)">cut for time</span>');
+      return `<div class="mb-8" style="${ex.cutForTime ? 'opacity:.55' : ''}">
+        <div class="row"><span style="flex:1">${ex.name}</span><span style="font-weight:700">${lb(s0.goalWeight)}</span><span class="text-dim" style="min-width:70px;text-align:right;white-space:nowrap;padding-left:8px">${work.length}×${s0.goalReps}</span></div>
+        ${detail.length ? `<div class="text-sm text-dim">${detail.join(' · ')}</div>` : ''}
+      </div>`;
+    }).join('') + `</div>`;
   },
 
   summary(plan) {
@@ -1276,7 +1369,7 @@ const Progress = {
       const prevBest = Math.max(0, ...prev.flatMap(w => (w.exercises || []).filter(x => x.lift === e.lift).flatMap(x => x.sets.filter(s => !s.isWarmup).map(s => this.e1rm(s.actualWeight, s.actualReps)))));
       return { name: e.name, sets: work.map(s => `${s.actualWeight}×${s.actualReps}`).join(', '), extra: work.filter(s => s.isExtra).length, e: best, pr: best > prevBest && prevBest > 0 };
     });
-    const t = record.timer || {};
+    const t = workoutRest(record) || {};
     const maxOffer = this.maxOffers(record);
     const ws = Cardio.weekStats(weekStart(localDate())), p = Cardio.prefs(weekStart(localDate()));
     const st = Schedule.status();
@@ -1421,27 +1514,17 @@ const Workout = {
     Guard.startWatching();
   },
 
-  loadPreviousWeights() {
-    const workouts = Store.get('workouts', []);
-    if (!workouts.length) return;
-    // Find most recent workout with matching exercises
-    for (let i = workouts.length - 1; i >= 0; i--) {
-      const w = workouts[i];
-      if (!w.exercises) continue;
-      w.exercises.forEach(prevEx => {
-        this.data.exercises.forEach(curEx => {
-          if (curEx.name === prevEx.name && !curEx.isMain && prevEx.sets && prevEx.sets.length > 0) {
-            const lastWeight = prevEx.sets.find(s => s.actualWeight > 0);
-            if (lastWeight) {
-              curEx.sets.forEach(s => {
-                s.goalWeight = lastWeight.actualWeight;
-                s.actualWeight = lastWeight.actualWeight;
-              });
-            }
-          }
-        });
-      });
-    }
+  loadPreviousWeights() { Planner.applyPreviousWeights(this.data.exercises); },
+
+  // True while resting after an exercise's last set: the next set is a
+  // different exercise, so this gap is a changeover, not a scored rest.
+  inChangeover() {
+    if (!this.data || this.activeSet || this.emom) return false;
+    let last = null;
+    this.data.exercises.forEach(ex => (ex.sets || []).forEach(s => {
+      if (s.done && s.endedAt && (!last || s.endedAt > last.s.endedAt)) last = { ex, s };
+    }));
+    return !!last && last.ex.sets.every(s => s.done);
   },
 
   render() {
@@ -3008,7 +3091,7 @@ const History = {
           <span style="font-weight:700">Day ${w.dayLabel}: ${w.dayName}</span>
           <span class="text-dim text-sm">${w.date}</span>
         </div>
-        <div class="text-sm text-dim mb-8">Week ${w.absWeek} &middot; ${w.duration} min ${w.completed ? '' : '(partial)'}${w.timer ? ` &middot; work ${Math.round(w.timer.totalWork/60)}m / rest ${Math.round(w.timer.totalRest/60)}m &middot; avg rest ${Math.floor(w.timer.avgRest/60)}:${String(w.timer.avgRest%60).padStart(2,'0')}${w.timer.restPeriods ? ` &middot; ${w.timer.restPeriods - w.timer.restOver}/${w.timer.restPeriods} rests on time` : ''}${w.timer.restOver ? ' &middot; <span style="color:var(--danger)">' + w.timer.restOver + ' over limit</span>' : ''}` : ''}</div>`;
+        <div class="text-sm text-dim mb-8">Week ${w.absWeek} &middot; ${w.duration} min ${w.completed ? '' : '(partial)'}${w.timer ? ` &middot; work ${Math.round(w.timer.totalWork/60)}m / rest ${Math.round(w.timer.totalRest/60)}m${(rt => rt ? ` &middot; avg rest ${fmtTime(rt.avgRest)} &middot; ${rt.restPeriods - rt.restOver}/${rt.restPeriods} rests on time${rt.restOver ? ' &middot; <span style="color:var(--danger)">' + rt.restOver + ' over limit</span>' : ''}${rt.changeovers ? ` &middot; ${rt.changeovers} changeover${rt.changeovers === 1 ? "" : "s"} (avg ${fmtTime(rt.avgChangeover)})` : ''}` : '')(workoutRest(w))}` : ''}</div>`;
       const hrRec = HrView.match(w, gym);
       if (hrRec && hrRec.hr) {
         const timed = (w.exercises || []).some(e => (e.sets || []).some(st => st.startedAt));
