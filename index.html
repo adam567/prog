@@ -94,6 +94,12 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
 #set-bar .end{font-size:.75rem;font-weight:600;background:rgba(0,0,0,.25);color:inherit;border:none;border-radius:8px;padding:6px 10px;margin-left:auto}
 #toast{position:fixed;left:12px;right:12px;bottom:150px;z-index:350;background:var(--surface3);color:var(--text);border-radius:12px;padding:12px;box-shadow:0 4px 20px rgba(0,0,0,.5);display:flex;align-items:center;gap:10px;font-size:.85rem}
 #toast button{flex-shrink:0}
+#reps-sheet{position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.45);display:flex;align-items:flex-end}
+#reps-sheet .panel{width:100%;background:var(--surface);border-top:2px solid var(--primary);border-radius:16px 16px 0 0;padding:18px 16px 28px}
+#reps-sheet .chips{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}
+#reps-sheet .chips button{padding:14px 0;font-size:1.2rem;font-weight:700;border-radius:10px;border:1px solid var(--surface3);background:var(--surface2);color:var(--dim)}
+#reps-sheet .chips button.in{color:var(--text);border-color:var(--primary)}
+#reps-sheet input{font-size:1.1rem;padding:10px}
 #page-workout{padding-bottom:90px}
 .amrap-badge{background:var(--warning);color:#000;padding:1px 6px;border-radius:4px;font-size:.65rem;font-weight:700;margin-left:4px}
 .skip-btn{font-size:.75rem;color:var(--dim);background:none;border:none;cursor:pointer;padding:4px 8px}
@@ -484,10 +490,10 @@ const BLOCKS = [
           { name: 'Pullups', reps: '6-8', sets: 3, rir: 2, defaultWeight: 0 },
           { name: 'Bent Row', reps: '6-8', sets: 2, rir: 2, defaultWeight: 115 },
           { name: 'Seated Military Press', was: 'OHP / Military Press', reps: '5-7', sets: 2, rir: 3, defaultWeight: 95 },
-          { name: 'DB Curl', reps: '6-8', sets: 5, rir: 1, defaultWeight: 35 },
+          { name: 'Front Squat', reps: '10', sets: 4, rir: 3, defaultWeight: 135, pair: 'FS+Curl' },
+          { name: 'DB Curl', reps: '6-8', sets: 5, rir: 1, defaultWeight: 35, pair: 'FS+Curl' },
           { name: 'Light DB Curl', reps: ['20', '10', '10', '10'], sets: 4, rir: null, quick: true, defaultWeight: 20 },
           { name: 'Tricep Extension', reps: '6-8', sets: 5, rir: 1, defaultWeight: 25 },
-          { name: 'Front Squat', reps: '10', sets: 4, rir: 3, defaultWeight: 135 },
           { name: 'KB Swings (60 lb)', reps: '15-20', sets: 2, rir: null, defaultWeight: 60 },
         ]
       },
@@ -648,7 +654,7 @@ const BLOCKS = [
 // volume. D: clean & press for shoulders and hips.
 const KB_ADDONS = {
   A: [{ name: 'KB Swing (60 lb), EMOM', reps: '10', sets: 5, rir: null, defaultWeight: 60 }],
-  B: [{ name: 'KB Suitcase Carry (60 lb)', reps: '40 yd/side', sets: 3, rir: null, defaultWeight: 60 }],
+  B: [{ name: 'KB Suitcase Carry (60 lb)', reps: '1 lap/side', sets: 3, rir: null, defaultWeight: 60 }],
   C: [{ name: 'KB Goblet Squat (60 lb)', reps: '10', sets: 2, rir: 3, defaultWeight: 60 }],
   D: [{ name: 'KB Clean & Press (40 lb)', reps: '5/side', sets: 3, rir: 2, defaultWeight: 40 }],
 };
@@ -686,6 +692,12 @@ function bandLbs() { return { ...BAND_DEFAULTS, ...((Store.get('profile', {}) ||
 function bandAssist(band) {
   const b = bandLbs();
   return band === 'green' ? b.green : band === 'black' ? b.black : band === 'both' ? b.green + b.black : 0;
+}
+// Unfinished pull-up sets take the effective weight (bodyweight - band assist).
+function syncBandWeight(ex) {
+  const w = bodyweight() - bandAssist(ex.band || 'none');
+  // Band is per set: changing it mid-exercise only affects sets not yet done.
+  ex.sets.forEach(s => { if (!s.done) { s.band = ex.band || 'none'; s.goalWeight = w; s.actualWeight = w; } });
 }
 function bodyweight() { return (Store.get('profile', {}) || {}).bodyweight || 230; }
 function addDays(dateStr, n) { const d = parseLocal(dateStr); d.setDate(d.getDate() + n); return localDate(d); }
@@ -763,7 +775,7 @@ function restStats(exercises, limit) {
   limit = limit || (Store.get('profile', {}) || {}).nudge || 120;
   const sets = [];
   (exercises || []).forEach((ex, ei) => (ex.sets || []).forEach(s => {
-    if (s.done && s.startedAt && s.endedAt) sets.push({ ei, start: s.startedAt, end: s.endedAt });
+    if (s.done && s.startedAt && s.endedAt) sets.push({ ei: ex.pair || ei, start: s.startedAt, end: s.endedAt });
   }));
   if (sets.length < 2) return null;
   sets.sort((a, b) => a.start - b.start);
@@ -1353,7 +1365,7 @@ const Planner = {
       const w = a.defaultWeight || 0, sets = [];
       for (let i = 0; i < a.sets; i++) { const r = Array.isArray(a.reps) ? a.reps[i % a.reps.length] : a.reps; sets.push({ goalWeight: w, goalReps: r, actualWeight: w, actualReps: r, isAmrap: false, done: false }); }
       const cut = !keep.has(a);
-      exercises.push({ name: a.name, was: a.was, lift: null, isMain: false, rir: a.rir, sets, skipped: cut, cutForTime: cut });
+      exercises.push({ name: a.name, was: a.was, lift: null, isMain: false, rir: a.rir, ...(a.pair ? { pair: a.pair } : {}), sets, skipped: cut, cutForTime: cut });
     });
 
     const fullSec = S.overhead + mains.reduce((t, x) => t + Math.max(x.n, fillTo) * S.main + (x.weight && !dayDef.isTestDay ? this.WARMUPS.length * S.warm : 0), 0) + accs.reduce((t, a) => t + this.accCost(a, S), 0);
@@ -1376,8 +1388,25 @@ const Planner = {
     for (let i = workouts.length - 1; i >= 0; i--) {
       (workouts[i].exercises || []).forEach(prevEx => {
         // Pull-ups: start with the band you used last time.
+        // Rep-first progression: next goal = last time's worst set + 1, up to 8.
+        // At 8 on every set, step to a lighter band (black > green > none) at 4.
+        // Black is the most assist used; never both bands.
         if (prevEx.name === 'Pullups' && !done.has('band')) {
-          exercises.forEach(c => { if (c.name === 'Pullups') c.band = prevEx.band || 'none'; });
+          const logged = (prevEx.sets || []).filter(s => !s.isWarmup && parseInt(s.actualReps) > 0);
+          let band = (logged[0] && logged[0].band) || prevEx.band || 'none';
+          if (band === 'both') band = 'black';
+          const same = logged.filter(s => (s.band || prevEx.band || 'none') === band || (band === 'black' && s.band === 'both'));
+          const worst = same.length ? Math.min(...same.map(s => parseInt(s.actualReps))) : null;
+          let goal = null;
+          if (worst != null) {
+            if (worst >= 8 && band !== 'none') { band = band === 'black' ? 'green' : 'none'; goal = 4; }
+            else goal = Math.min(8, worst + 1);
+          }
+          exercises.forEach(c => {
+            if (c.name !== 'Pullups') return;
+            c.band = band;
+            if (goal && /^\d+-\d+$/.test(String((c.sets[0] || {}).goalReps))) c.sets.forEach(x => { x.goalReps = String(goal); x.actualReps = String(goal); });
+          });
           done.add('band');
         }
         const last = (prevEx.sets || []).find(s => s.actualWeight > 0);
@@ -1389,6 +1418,8 @@ const Planner = {
         });
       });
     }
+    // Pull-ups: weight is bodyweight minus band assist, not last time's number.
+    exercises.forEach(c => { if (c.name === 'Pullups') syncBandWeight(c); });
     return exercises;
   },
 
@@ -1774,7 +1805,10 @@ const Workout = {
       if (ex.skipped) return;
       const allDone = ex.sets.every(s => s.done);
       const headerClass = allDone ? 'background:var(--surface2)' : '';
-      html += `<div class="ex-card">
+      const mate = this.pairMate(ei);
+      const upNext = mate >= 0 ? this.pairNext(ei) : null;
+      html += `<div class="ex-card"${mate >= 0 ? ' style="border-left:3px solid var(--accent)"' : ''}>
+        ${mate >= 0 && !d.exercises[mate].skipped ? `<div class="text-sm" style="color:var(--accent);padding:6px 12px 0">⇄ Superset with ${esc(d.exercises[mate].name)}: alternate sets</div>` : ''}
         <div class="ex-header" style="${headerClass}">
           <div>
             <span class="name">${ex.name}</span>
@@ -1810,7 +1844,6 @@ const Workout = {
           <button class="band-btn ${band === 'none' ? 'active' : ''}" onclick="Workout.setBand(${ei},'none')">None</button>
           <button class="band-btn green ${band === 'green' ? 'active' : ''}" onclick="Workout.setBand(${ei},'green')">Green −${bl.green}</button>
           <button class="band-btn black ${band === 'black' ? 'active' : ''}" onclick="Workout.setBand(${ei},'black')">Black −${bl.black}</button>
-          <button class="band-btn ${band === 'both' ? 'active' : ''}" onclick="Workout.setBand(${ei},'both')">Both</button>
           <span class="text-dim text-sm" style="margin-left:auto">${effective} lb eff.</span>
         </div>`;
       }
@@ -1819,12 +1852,13 @@ const Workout = {
       ex.sets.forEach((s, si) => {
         const done = s.done;
         const lbl = s.isWarmup ? `W${++nW}` : s.isBackoff ? `↓${++nB}` : s.isExtra ? `+${++nX}` : `S${++nS}`;
-        html += `<div class="set-row">
+        const isNext = upNext && upNext.ei === ei && upNext.si === si;
+        html += `<div class="set-row" id="set-${ei}-${si}"${isNext ? ' style="background:rgba(247,37,133,.08);border-radius:8px"' : ''}>
           <div class="set-label" style="display:flex;align-items:center;gap:2px">
             ${ex.sets.length > 1 ? `<button style="font-size:.6rem;color:var(--dim);background:none;border:none;cursor:pointer;padding:0;line-height:1" onclick="Workout.deleteSet(${ei},${si})">✕</button>` : ''}
             ${s.isAmrap ? `<span class="amrap-badge">AMRAP</span>` : `<span style="${s.isWarmup ? 'color:var(--dim)' : s.isBackoff ? 'color:var(--accent)' : s.isExtra ? 'color:var(--success)' : ''}">${lbl}</span>`}
           </div>
-          <div class="set-goal">${s.goalWeight > 0 ? s.goalWeight + ' × ' + s.goalReps : s.goalReps + ' reps'}</div>
+          <div class="set-goal">${ex.name === 'Pullups' ? `${({ none: 'No band', green: 'Green', black: 'Black', both: 'Both' })[s.band || ex.band || 'none']}<br>${s.goalReps}` : s.goalWeight > 0 ? s.goalWeight + ' × ' + s.goalReps : s.goalReps + ' reps'}</div>
           <div class="set-actual">
             <button class="adj" onclick="Workout.adjWeight(${ei},${si},-5)">-</button>
             <input type="number" value="${s.actualWeight}" step="5"
@@ -1845,7 +1879,7 @@ const Workout = {
               : this.isActive(ei, si)
                 ? `<button class="set-check ${this.activeSet.startTime ? 'timing' : 'countdown'}" id="tut-btn" onclick="Workout.tapActive()">${this.activeSet.startTime ? '■' : '…'}</button>
                    <div class="set-tut" id="tut-live">${this.activeSet.startTime ? '' : 'ready'}</div>`
-                : `<button class="set-check ${this.activeSet || (this.emom && this.emom.ei !== ei) ? 'locked' : ''}" onclick="Workout.startSet(${ei},${si})">▶</button>
+                : `<button class="set-check ${this.activeSet || (this.emom && this.emom.ei !== ei) ? 'locked' : ''}" ${isNext && !this.activeSet ? 'style="border-color:var(--accent);color:var(--accent)"' : ''} onclick="Workout.startSet(${ei},${si})">▶</button>
                    <button style="font-size:.8rem;color:var(--primary);background:none;border:none;cursor:pointer;padding:4px 6px" onclick="event.stopPropagation();Workout.backfillSet(${ei},${si})">done</button>`
             }
           </div>
@@ -1957,6 +1991,122 @@ const Workout = {
   setReps(ei, si, val) {
     this.data.exercises[ei].sets[si].actualReps = parseInt(val) || val;
     this.save();
+  },
+
+  // After a set ends: if reps weren't entered, a sheet asks for them before
+  // anything else. The rest clock keeps running underneath.
+  // Supersets: two exercises sharing a template `pair` alternate sets.
+  pairMate(ei) {
+    const ex = this.data.exercises[ei];
+    if (!ex || !ex.pair) return -1;
+    return this.data.exercises.findIndex((x, i) => i !== ei && x.pair === ex.pair);
+  },
+  // The set to do next in a pair: the partner of whoever went last.
+  pairNext(ei) {
+    const mate = this.pairMate(ei);
+    if (mate < 0) return null;
+    const ids = [Math.min(ei, mate), Math.max(ei, mate)].filter(i => !this.data.exercises[i].skipped);
+    let last = null;
+    ids.forEach(i => this.data.exercises[i].sets.forEach(s => { if (s.done && s.endedAt && (!last || s.endedAt > last.t)) last = { i, t: s.endedAt }; }));
+    const order = last ? [ids.find(i => i !== last.i), last.i].filter(i => i != null) : ids;
+    for (const i of order) { const si = this.data.exercises[i].sets.findIndex(s => !s.done); if (si >= 0) return { ei: i, si }; }
+    return null;
+  },
+  scrollToPairNext(ei) {
+    const n = this.pairNext(ei);
+    if (!n) return;
+    const el = document.getElementById(`set-${n.ei}-${n.si}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  },
+
+  // Carries are logged in laps of a known route (the driveway: 72 ft out and
+  // back = 48 yd per hand). One lap = one set; 2 laps in one go logs two sets,
+  // splitting the time. Stored as yards so totals still add up.
+  carryLap() { return ((Store.get('profile', {}) || {}).carryLap) || 48; },
+  askLaps(ei, si, next, next2) {
+    const ex = this.data.exercises[ei], s = ex.sets[si], lap = this.carryLap();
+    const max = next2 >= 0 ? 3 : next >= 0 ? 2 : 1;
+    let el = document.getElementById('reps-sheet');
+    if (el) el.remove();
+    el = document.createElement('div');
+    el.id = 'reps-sheet';
+    el.innerHTML = `<div class="panel">
+      <div style="font-weight:700;font-size:1.1rem">${esc(this.setName(ei, si))}: how many laps per hand?</div>
+      <div class="text-dim text-sm mt-8">1 lap = ${lap} yd/side${s.actualWeight > 0 ? ' · ' + s.actualWeight + ' lb' : ''}${s.tut ? ' · ' + s.tut + 's' : ''}</div>
+      <div class="chips" style="grid-template-columns:repeat(${max},1fr)">${[1, 2, 3].slice(0, max).map(n => `<button class="${n === 1 ? 'in' : ''}" data-n="${n}">${n} lap${n > 1 ? 's' : ''}<div class="text-sm" style="font-weight:400">${n > 1 ? n + ' sets' : '1 set'}</div></button>`).join('')}</div>
+      <div class="row gap-8"><input type="number" inputmode="numeric" placeholder="Other: yd/side" class="flex-1 other"><button class="btn btn-sm btn-success" style="width:auto">Save</button></div>
+    </div>`;
+    const finish = () => { this.save(); el.remove(); this.render(); };
+    el.querySelectorAll('.chips button').forEach(b => b.onclick = () => {
+      const n = +b.dataset.n, idx = [si, next, next2].slice(0, n);
+      const t0 = s.startedAt, t1 = s.endedAt;
+      idx.forEach((k, j) => {
+        const t = ex.sets[k];
+        t.actualReps = `${lap} yd/side`; t.yards = lap; t.laps = 1; t.actualWeight = s.actualWeight; t.done = true;
+        if (j) t.backToBack = true;
+        if (t0 && t1) {
+          t.startedAt = Math.round(t0 + (t1 - t0) * j / n); t.endedAt = Math.round(t0 + (t1 - t0) * (j + 1) / n);
+          t.tut = Math.round((t.endedAt - t.startedAt) / 1000);
+          if (s.estimated) t.estimated = true;
+        }
+      });
+      finish();
+    });
+    const inp = el.querySelector('input.other');
+    const other = () => { const y = parseInt(inp.value); if (!(y > 0)) return; s.actualReps = `${y} yd/side`; s.yards = y; s.done = true; finish(); };
+    el.querySelector('.btn').onclick = other;
+    inp.onkeydown = e => { if (e.key === 'Enter') other(); };
+    document.body.appendChild(el);
+  },
+
+  needsReps(s) { return !(typeof s.actualReps === 'number' && s.actualReps > 0); },
+  askReps(ei, si) {
+    const s = this.data.exercises[ei].sets[si];
+    if (!s || !this.needsReps(s)) return this.scrollToPairNext(ei);
+    const m = String(s.goalReps || '').match(/(\d+)(?:\s*-\s*(\d+))?/);
+    const lo = m ? +m[1] : 6, hi = m && m[2] ? +m[2] : lo;
+    const yd = /yd|lap/.test(String(s.goalReps)); // carries: distance per side, not reps
+    const ex = this.data.exercises[ei];
+    const next = ex.sets.findIndex((x, i) => i > si && !x.done);
+    const next2 = next < 0 ? -1 : ex.sets.findIndex((x, i) => i > next && !x.done);
+    if (yd) return this.askLaps(ei, si, next, next2);
+    const chips = [];
+    for (let n = Math.max(1, lo - 3); n <= hi + 2; n++) chips.push(n);
+    let el = document.getElementById('reps-sheet');
+    if (el) el.remove();
+    el = document.createElement('div');
+    el.id = 'reps-sheet';
+    el.innerHTML = `<div class="panel">
+      <div style="font-weight:700;font-size:1.1rem">${esc(this.setName(ei, si))}: ${yd ? 'yards per side?' : 'how many reps?'}</div>
+      <div class="text-dim text-sm mt-8">${s.actualWeight > 0 ? s.actualWeight + ' lb · ' : ''}goal ${esc(String(s.goalReps))}${s.tut ? ' · ' + s.tut + 's' : ''}</div>
+      ${next >= 0 ? `<label class="text-sm mt-8" style="display:flex;align-items:center;gap:8px"><input type="checkbox" class="b2b" style="width:22px;height:22px"> That was 2 sets back-to-back (logs ${esc(this.setName(ei, next))} too, splitting the time)</label>` : ''}
+      <div class="chips">${chips.map(n => `<button class="${yd ? (n === lo ? 'in' : '') : (n >= lo && n <= hi ? 'in' : '')}" data-n="${n}">${n}</button>`).join('')}</div>
+      <div class="row gap-8"><input type="number" inputmode="numeric" placeholder="Other" class="flex-1 other"><button class="btn btn-sm btn-success" style="width:auto">Save</button></div>
+    </div>`;
+    const done = n => {
+      n = parseInt(n); if (!(n > 0)) return;
+      setTimeout(() => this.scrollToPairNext(ei), 50);
+      const val = yd ? `${n} yd/side` : n;
+      s.actualReps = val;
+      const b2b = el.querySelector('.b2b');
+      if (b2b && b2b.checked && next >= 0) {
+        // One continuous effort covering two sets: each set gets half the window.
+        const t = ex.sets[next];
+        t.actualReps = val; t.actualWeight = s.actualWeight; t.done = true; t.backToBack = true;
+        if (s.startedAt && s.endedAt) {
+          const mid = Math.round((s.startedAt + s.endedAt) / 2);
+          t.startedAt = mid; t.endedAt = s.endedAt; s.endedAt = mid;
+          s.tut = Math.round((mid - s.startedAt) / 1000); t.tut = Math.round((t.endedAt - mid) / 1000);
+          if (s.estimated) t.estimated = true;
+        }
+      }
+      this.save(); el.remove(); this.render();
+    };
+    el.querySelectorAll('.chips button').forEach(b => b.onclick = () => done(b.dataset.n));
+    const inp = el.querySelector('input.other');
+    el.querySelector('.btn').onclick = () => done(inp.value);
+    inp.onkeydown = e => { if (e.key === 'Enter') done(inp.value); };
+    document.body.appendChild(el);
   },
 
   activeSet: null,  // { ei, si, tapAt, startTime, tick } - one timed set at a time
@@ -2088,6 +2238,7 @@ const Workout = {
     Timer.start('resting');
     this.save();
     this.render();
+    this.askReps(ei, si);
   },
 
   undoSet(ei, si) {
@@ -2275,10 +2426,12 @@ const Workout = {
     Timer.start('resting');
     this.save();
     this.render();
+    this.askReps(ei, si);
   },
 
   setBand(ei, band) {
     this.data.exercises[ei].band = band;
+    syncBandWeight(this.data.exercises[ei]);
     this.save();
     this.render();
   },
@@ -2407,6 +2560,7 @@ const Workout = {
         lift: e.lift,
         isMain: e.isMain,
         band: e.band || null,
+        ...(e.pair ? { pair: e.pair } : {}),
         pct: e.pct || null,
         sets: e.sets.filter(s => s.done).map(s => ({
           goalWeight: s.goalWeight,
@@ -2423,6 +2577,9 @@ const Workout = {
           ...(s.rpe ? { rpe: s.rpe } : {}),
           ...(s.note ? { note: s.note } : {}),
           ...(s.estimated ? { estimated: true } : {}),
+          ...(s.band ? { band: s.band } : {}),
+          ...(s.yards ? { yards: s.yards } : {}),
+          ...(s.backToBack ? { backToBack: true } : {}),
         }))
       }))
     };
