@@ -1582,6 +1582,8 @@ const Progress = {
       ${s.auto ? `<div class="text-sm" style="color:var(--warning)">${esc(s.auto)}</div>` : ''}
       <div class="text-sm text-dim mb-8">Day ${s.dayLabel} · ${s.duration} min${s.plannedMin ? ` (planned ~${s.plannedMin})` : ''} · session ${s.session} of ${totalDays()}</div>
       ${lines}
+      ${(() => { const w = Store.get('workouts', []).slice(-1)[0]; if (!w || !(w.exercises || []).some(e => (e.sets || []).some(x => x.startedAt))) return ''; const on = History.mode() === 'timeline';
+        return `<button class="band-btn mt-8" onclick="History.mode()==='timeline'?History.setMode('exercise'):History.setMode('timeline');Home.render()">${on ? 'Hide timeline' : 'Show timeline'}</button>${on ? `<div class="mt-8">${timelineHtml(w)}</div>` : ''}`; })()}
       ${s.rest ? `<div class="text-sm mt-8">Rests on time: ${s.rest}</div>` : ''}
       ${(s.maxOffer || []).map(o => `<div style="border-top:1px solid var(--surface2);margin-top:10px;padding-top:10px">
         <div class="text-sm">${liftName(o.lift)}: you lifted ${o.used} where ${o.goal} was planned. Set the ${liftName(o.lift).toLowerCase()} working max ${o.from} → <strong>${o.to}</strong> so the program builds from what you lifted?</div>
@@ -3624,7 +3626,10 @@ const History = {
           <div id="hrv-${wi}"></div>`;
       }
 
-      if (w.exercises) {
+      const canTl = (w.exercises || []).some(e => (e.sets || []).some(st => st.startedAt));
+      if (canTl) html += `<div class="row gap-8 mb-8">${[['exercise', 'By exercise'], ['timeline', 'Timeline']].map(([m, l]) => `<button class="band-btn ${this.mode() === m ? 'active' : ''}" onclick="History.setMode('${m}')">${l}</button>`).join('')}</div>`;
+      if (canTl && this.mode() === 'timeline') html += timelineHtml(w);
+      else if (w.exercises) {
         w.exercises.forEach(ex => {
           if (!ex.sets || !ex.sets.length) return;
           const setsStr = ex.sets.map(s => {
@@ -3638,8 +3643,38 @@ const History = {
       html += `</div>`;
     });
     el.innerHTML = html;
-  }
+  },
+  // "By exercise" or "Timeline" for every workout card; remembered on this phone.
+  mode() { try { return localStorage.getItem('ph3__histMode') || 'exercise'; } catch { return 'exercise'; } },
+  setMode(m) { try { localStorage.setItem('ph3__histMode', m); } catch {} this.render(); },
 };
+
+// Sets in the order they were done, with the gap before each: "rest" within
+// an exercise (or superset pair), "switch" when moving to a different one.
+function timelineHtml(w) {
+  const rows = [];
+  (w.exercises || []).forEach(ex => {
+    let nW = 0, nS = 0, nX = 0, nB = 0;
+    (ex.sets || []).forEach(s => {
+      const lbl = s.isWarmup ? `W${++nW}` : s.isBackoff ? `↓${++nB}` : s.isExtra ? `+${++nX}` : `S${++nS}`;
+      if (s.startedAt && s.endedAt) rows.push({ ex, s, lbl, key: ex.pair || ex.name });
+    });
+  });
+  rows.sort((a, b) => a.s.startedAt - b.s.startedAt);
+  const clock = t => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  let html = '', prev = null;
+  rows.forEach(r => {
+    if (prev) {
+      const gap = Math.round((r.s.startedAt - prev.s.endedAt) / 1000);
+      if (gap > 0) html += `<div class="text-sm" style="color:var(--dim);padding:0 0 0 52px;font-size:.72rem">${r.key === prev.key ? 'rest' : 'switch'} ${fmtTime(gap)}</div>`;
+    }
+    const s = r.s, wt = s.actualWeight > 0 ? s.actualWeight + '×' : '';
+    const band = s.band && s.band !== 'none' ? ` · ${s.band}` : '';
+    html += `<div class="text-sm" style="display:flex;gap:8px"><span class="text-dim" style="width:44px;flex-shrink:0">${clock(s.startedAt)}</span><span style="flex:1"><span style="color:var(--text)">${esc(r.ex.name)} ${r.lbl}</span> <span class="text-dim">${wt}${esc(String(s.actualReps))}${band}${s.tut ? ` · ${s.tut}s` : ''}${s.rpe ? ` @${s.rpe}` : ''}${s.backToBack ? ' · back-to-back' : ''}</span></span></div>`;
+    prev = r;
+  });
+  return html || '<div class="text-sm text-dim">No timed sets.</div>';
+}
 
 // ===================== SETTINGS =====================
 const Settings = {
