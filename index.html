@@ -284,13 +284,14 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
   </div>
   <div class="card mt-16">
     <div class="card-title">Weekly Goals</div>
+    <p class="text-dim text-sm mb-8">Aerobic minutes: all steady work at or above the floor, whatever the pace. Zone 2 is shown for reference only.</p>
     <div class="row gap-8">
       <div class="flex-1 input-group"><label>Max HR</label><input type="number" id="set-maxhr" step="1"></div>
-      <div class="flex-1 input-group"><label>Zone 2 low</label><input type="number" id="set-z2low" step="1"></div>
+      <div class="flex-1 input-group"><label>Aerobic floor (Z2 low)</label><input type="number" id="set-z2low" step="1"></div>
       <div class="flex-1 input-group"><label>Zone 2 high</label><input type="number" id="set-z2high" step="1"></div>
     </div>
     <div class="row gap-8">
-      <div class="flex-1 input-group"><label>Zone 2 min / week</label><input type="number" id="set-z2goal" step="10"></div>
+      <div class="flex-1 input-group"><label>Aerobic min / week</label><input type="number" id="set-aerogoal" step="10"></div>
       <div class="flex-1 input-group"><label>Hard sessions / week</label><input type="number" id="set-hardgoal" step="1"></div>
       <div class="flex-1 input-group"><label>Lifts / week</label><input type="number" id="set-liftgoal" step="1"></div>
     </div>
@@ -1556,22 +1557,22 @@ const Progress = {
         <div class="row gap-8 mt-8"><button class="band-btn" style="padding:8px 10px" onclick="Progress.applyMax('${o.lift}',${o.to})">Set ${o.to}</button><button class="band-btn" style="padding:8px 10px" onclick="Progress.dropOffer('${o.lift}')">Keep ${o.from}</button></div>
       </div>`).join('')}
       <div class="text-sm mt-8" style="color:${s.tone === 'warn' ? 'var(--warning)' : 'var(--success)'}">${esc(s.schedule)}</div>
-      <div class="text-sm text-dim">This week: lifts ${s.week.lifts}/${s.week.liftGoal} · Zone 2 ${s.week.z2}/${s.week.z2Goal} min · hard ${s.week.hard}/${s.week.hardGoal}</div>
+      <div class="text-sm text-dim">This week: lifts ${s.week.lifts}/${s.week.liftGoal} · aerobic ${s.week.aero ?? 0}/${s.week.aeroGoal ?? 150} min · hard ${s.week.hard}/${s.week.hardGoal}</div>
       ${s.cardioAnswered ? '' : this.cardioNudge()}
     </div>`;
   },
   // Right after lifting: nudge toward this week's cardio, sized to what's left.
   cardioNudge() {
     const ws = weekStart(localDate()), p = Cardio.prefs(ws), st = Cardio.weekStats(ws);
-    const z2Left = Math.max(0, p.z2Goal - st.z2), hardLeft = Math.max(0, p.hardGoal - st.hard);
-    const blk = Cardio.Z2_BLOCK, z2Min = z2Left ? Math.min(60, Math.max(blk, Math.ceil(z2Left / 5) * 5)) : blk;
-    const need = [z2Left ? `${z2Left} min Zone 2` : '', hardLeft ? `${hardLeft} hard session${hardLeft === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ');
+    const aeroLeft = Math.max(0, p.aeroGoal - st.aero), hardLeft = Math.max(0, p.hardGoal - st.hard);
+    const blk = Cardio.AERO_BLOCK, aeroMin = aeroLeft ? Math.min(60, Math.max(blk, Math.ceil(aeroLeft / 5) * 5)) : blk;
+    const need = [aeroLeft ? `${aeroLeft} aerobic min` : '', hardLeft ? `${hardLeft} hard session${hardLeft === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ');
     const btn = (label, js) => `<button class="band-btn" style="padding:8px 10px" onclick="${js}">${label}</button>`;
     return `<div style="border-top:1px solid var(--surface2);margin-top:10px;padding-top:10px">
       <div class="text-sm" style="font-weight:700">Cardio now?</div>
       <div class="text-sm text-dim mb-8">${need ? `Still need ${need} this week.` : 'Weekly cardio goals are met. Extra is a bonus.'}</div>
       <div class="row gap-8" style="flex-wrap:wrap">
-        ${btn(`Treadmill Zone 2 · ${z2Min}m`, `Progress.cardio('z2-tread',${z2Min})`)}
+        ${btn(`Treadmill · ${aeroMin}m`, `Progress.cardio('z2-tread',${aeroMin})`)}
         ${hardLeft ? btn('Sprints / incline', `Progress.cardio('incline',20)`) : ''}
         ${btn('Outdoor', `Progress.cardio('run',30)`)}
         ${btn('Skip for now', 'Progress.cardio(null)')}
@@ -1602,7 +1603,7 @@ const Progress = {
       auto, dayLabel: record.dayLabel, duration: record.duration, plannedMin: record.plannedMin, session: (Store.get('program', {}) || {}).currentDay || 0,
       lifts, maxOffer, rest: t.restPeriods ? `${t.restPeriods - t.restOver} of ${t.restPeriods} (avg ${fmtTime(t.avgRest)})` : '',
       schedule: st.text, tone: st.tone,
-      week: { lifts: ws.lifts, liftGoal: p.liftGoal, z2: ws.z2, z2Goal: p.z2Goal, hard: ws.hard, hardGoal: p.hardGoal },
+      week: { lifts: ws.lifts, liftGoal: p.liftGoal, aero: ws.aero, aeroGoal: p.aeroGoal, hard: ws.hard, hardGoal: p.hardGoal },
     };
   },
   // Every working set of a main lift lighter (or heavier) than planned: offer
@@ -2551,8 +2552,8 @@ const Review = {
 
 // ===================== CARDIO =====================
 const CARDIO_TYPES = {
-  'z2-tread': { label: 'Zone 2 · Treadmill', z2: true, tread: true },
-  'z2-other': { label: 'Zone 2 · Outdoor / other', z2: true },
+  'z2-tread': { label: 'Steady · Treadmill', tread: true },
+  'z2-other': { label: 'Steady · Outdoor / other' },
   'sprint':   { label: 'Sprints', hard: true, tread: true, intervals: true },
   'incline':  { label: 'Incline intervals', hard: true, tread: true, intervals: true },
   'run':      { label: 'Run' },
@@ -2572,18 +2573,32 @@ const Cardio = {
     const profile = Store.get('profile', {}) || {};
     const c = profile.cardio || {};
     const plan = ws && (profile.weekPlans || {})[ws];
-    const base = { maxHr: c.maxHr || 185, z2Low: c.z2Low || 111, z2High: c.z2High || 130, z2Goal: c.z2Goal || 120, hardGoal: c.hardGoal || 2, liftGoal: c.liftGoal || 4 };
-    return plan ? { ...base, z2Goal: plan.z2Goal, hardGoal: plan.hardGoal, liftGoal: plan.liftGoal, planName: plan.name } : base;
+    const base = { maxHr: c.maxHr || 185, z2Low: c.z2Low || 111, z2High: c.z2High || 130, aeroGoal: c.aeroGoal || 150, hardGoal: c.hardGoal || 2, liftGoal: c.liftGoal || 4 };
+    // Week plans saved before aerobic minutes carry z2Goal (base 120): scale it.
+    const aeroGoal = plan && (plan.aeroGoal ?? (plan.z2Goal != null ? Math.round(base.aeroGoal * plan.z2Goal / 120) : base.aeroGoal));
+    return plan ? { ...base, aeroGoal, hardGoal: plan.hardGoal, liftGoal: plan.liftGoal, planName: plan.name } : base;
   },
   prefsBase() {
     const c = (Store.get('profile', {}) || {}).cardio || {};
-    return { maxHr: c.maxHr || 185, z2Low: c.z2Low || 111, z2High: c.z2High || 130, z2Goal: c.z2Goal || 120, hardGoal: c.hardGoal || 2, liftGoal: c.liftGoal || 4 };
+    return { maxHr: c.maxHr || 185, z2Low: c.z2Low || 111, z2High: c.z2High || 130, aeroGoal: c.aeroGoal || 150, hardGoal: c.hardGoal || 2, liftGoal: c.liftGoal || 4 };
   },
   list() { return Store.get('cardio', []).filter(c => !c.deleted); },
   typeOf(c) { return CARDIO_TYPES[c.type] || { label: c.type || 'Other' }; },
 
-  // Zone 2 minutes. With a Strava heart-rate trace: actual minutes in range.
-  // Manual Zone 2 sessions: full duration, unless the avg HR says otherwise.
+  // Aerobic minutes (the weekly goal): all steady work at or above the floor
+  // (z2Low), however hard. With a Strava trace: actual minutes at/above it.
+  // Logged by hand: full duration, unless the avg HR is well below the floor.
+  aeroMin(c) {
+    const p = this.prefs();
+    if (c.hist) {
+      let s = 0;
+      for (const [bpm, sec] of Object.entries(c.hist)) if (+bpm >= p.z2Low) s += sec;
+      return Math.round(s / 60);
+    }
+    if (c.hr && c.hr < p.z2Low - 10) return 0;
+    return c.duration || 0;
+  },
+  // Zone 2 minutes: reference only, no goal. Needs a heart-rate trace.
   z2Min(c) {
     const p = this.prefs();
     if (c.hist) {
@@ -2591,15 +2606,12 @@ const Cardio = {
       for (const [bpm, sec] of Object.entries(c.hist)) if (+bpm >= p.z2Low && +bpm <= p.z2High) s += sec;
       return Math.round(s / 60);
     }
-    if (!this.typeOf(c).z2) return 0;
-    if (c.hr && (c.hr > p.z2High + 5 || c.hr < p.z2Low - 10)) return 0;
-    return c.duration || 0;
+    return 0;
   },
   hrWarning(c) {
     const p = this.prefs();
-    if (c.hist || !this.typeOf(c).z2 || !c.hr) return '';
-    if (c.hr > p.z2High + 5) return 'HR above Zone 2: not counted';
-    if (c.hr < p.z2Low - 10) return 'HR below Zone 2: not counted';
+    if (c.hist || !c.hr) return '';
+    if (c.hr < p.z2Low - 10) return 'HR below aerobic floor: not counted';
     return '';
   },
   isHard(c) { return c.hard ?? !!this.typeOf(c).hard; },
@@ -2610,6 +2622,7 @@ const Cardio = {
     const lifts = Store.get('workouts', []).filter(w => w.date >= ws && w.date < we).length;
     return {
       lifts,
+      aero: wk.reduce((s, c) => s + this.aeroMin(c), 0),
       z2: wk.reduce((s, c) => s + this.z2Min(c), 0),
       hard: wk.filter(c => this.isHard(c)).length,
       sessions: wk.length,
@@ -2618,21 +2631,21 @@ const Cardio = {
   },
   // Pace through the week: where you'd be by end of today if spread evenly.
   // Never prescribes a day; just flags when you're falling behind.
-  // Zone 2 comes in real blocks (Attia-style, 45+ min), not a daily trickle:
-  // pace it as "blocks left vs days left", never as minutes per day.
-  Z2_BLOCK: 45,
-  z2Pace(done, goal) {
+  // Aerobic work comes in real sessions (45+ min), not a daily trickle:
+  // pace it as "sessions left vs days left", never as minutes per day.
+  AERO_BLOCK: 45,
+  aeroPace(done, goal) {
     if (done >= goal) return '<span style="color:var(--success)">Done for the week</span>';
     const daysLeft = 7 - daysSince(weekStart(localDate())); // including today
-    const left = goal - done, blocks = Math.ceil(left / this.Z2_BLOCK);
-    const need = `${left} min left · ${blocks} block${blocks === 1 ? '' : 's'} of ${this.Z2_BLOCK}+ min · ${daysLeft} day${daysLeft === 1 ? '' : 's'} to go`;
+    const left = goal - done, blocks = Math.ceil(left / this.AERO_BLOCK);
+    const need = `${left} min left · ${blocks} session${blocks === 1 ? '' : 's'} of ${this.AERO_BLOCK}+ min · ${daysLeft} day${daysLeft === 1 ? '' : 's'} to go`;
     if (this._warm) return `<span class="text-dim">${need}</span>`;
     if (blocks > daysLeft) return `<span style="color:var(--danger)">${need}</span>`;
     if (blocks > Math.ceil(daysLeft / 2)) return `<span style="color:var(--warning)">Getting tight · ${need}</span>`;
     return `<span class="text-dim">On pace · ${need}</span>`;
   },
   pace(done, goal, unit) {
-    if (unit === 'min') return this.z2Pace(done, goal);
+    if (unit === 'min') return this.aeroPace(done, goal);
     if (this._warm && done < goal) return '<span class="text-dim">Warm-up week: pacing starts Monday</span>';
     const dayIdx = daysSince(weekStart(localDate())); // 0 = Monday
     const daysLeft = 6 - dayIdx;                      // after today
@@ -2655,7 +2668,7 @@ const Cardio = {
   },
   weekHit(ws) {
     const p = this.prefs(ws), st = this.weekStats(ws);
-    return st.z2 >= p.z2Goal && st.hard >= p.hardGoal && st.lifts >= p.liftGoal;
+    return st.aero >= p.aeroGoal && st.hard >= p.hardGoal && st.lifts >= p.liftGoal;
   },
   // Consecutive weeks on target; this week counts once it's already hit.
   streak() {
@@ -2669,13 +2682,14 @@ const Cardio = {
     if (this.isPartial(ws)) this._warm = true; else this._warm = false;
     const bar = (v, g, color) => `<div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100, Math.round(100 * v / g))}%;background:${color}"></div></div>`;
     return `
-      <div class="goal-row"><span class="text-dim text-sm">Zone 2${compact ? '' : ` (${p.z2Low}–${p.z2High} bpm)`}</span><span><span class="big">${s.z2}</span> / ${p.z2Goal} min</span></div>
-      ${bar(s.z2, p.z2Goal, 'var(--success)')}
-      <div class="text-sm">${this.pace(s.z2, p.z2Goal, 'min')}</div>
+      <div class="goal-row"><span class="text-dim text-sm">Aerobic${compact ? '' : ` (${p.z2Low}+ bpm)`}</span><span><span class="big">${s.aero}</span> / ${p.aeroGoal} min</span></div>
+      ${bar(s.aero, p.aeroGoal, 'var(--success)')}
+      <div class="text-sm">${this.pace(s.aero, p.aeroGoal, 'min')}</div>
       <div class="goal-row" style="margin-top:10px"><span class="text-dim text-sm">Hard sessions</span><span class="dots">${this.dots(s.hard, p.hardGoal)}</span></div>
       <div class="text-sm">${this.pace(s.hard, p.hardGoal)}</div>
       <div class="goal-row" style="margin-top:10px"><span class="text-dim text-sm">Lifting sessions</span><span class="dots lift">${this.dots(s.lifts, p.liftGoal)}</span></div>
       <div class="text-sm">${this.pace(s.lifts, p.liftGoal)}</div>
+      ${compact ? '' : `<div class="text-sm text-dim mt-8">Zone 2 (${p.z2Low}–${p.z2High}): ${s.z2} min · reference only</div>`}
       ${BadNight.restCount(ws) ? `<div class="text-sm text-dim mt-8">Recovery days by choice: ${BadNight.restCount(ws)}</div>` : ''}
       <div class="text-sm mt-8" style="color:${st ? 'var(--success)' : 'var(--dim)'}">${st ? `${st} week${st === 1 ? '' : 's'} in a row on target` : 'Streak starts the first week you hit all three'}</div>
       ${this.rollingHtml()}
@@ -2697,7 +2711,7 @@ const Cardio = {
     const row = (label, v, g, unit, d) => `<div class="goal-row" style="margin-top:6px"><span class="text-dim text-sm">${label}</span><span><strong style="color:${v >= g ? 'var(--success)' : 'var(--text)'}">${v}</strong> / ${g}${unit}</span></div><div class="text-sm" style="text-align:right">${d}</div>`;
     return `<div style="border-top:1px solid var(--surface2);margin-top:12px;padding-top:10px">
       <div class="text-sm" style="font-weight:700">Past 7 days <span class="text-dim" style="font-weight:400">· ${fmt(from)} – ${fmt(today)}</span></div>
-      ${row('Zone 2', now.z2, p.z2Goal, ' min', delta(now.z2, prev.z2, ' min'))}
+      ${row('Aerobic', now.aero, p.aeroGoal, ' min', delta(now.aero, prev.aero, ' min'))}
       ${row('Hard sessions', now.hard, p.hardGoal, '', delta(now.hard, prev.hard, ''))}
       ${row('Lifting sessions', now.lifts, p.liftGoal, '', delta(now.lifts, prev.lifts, ''))}
     </div>`;
@@ -2720,20 +2734,25 @@ const Cardio = {
   },
   PLANS: [
     { key: 'full',   name: 'Full week',          desc: 'Normal targets. Just go.' },
-    { key: 'light',  name: 'Lighter week',       desc: 'About half: 60 min Z2, 1 hard, 2 lifts' },
-    { key: 'cardio', name: 'Cardio comeback',    desc: '120 min Z2, 1 hard, 1 lift' },
-    { key: 'lift',   name: 'Lifting comeback',   desc: '60 min Z2, 1 hard, 3 lifts' },
-    { key: 'move',   name: 'Just move',          desc: '60 min Z2, 0 hard, 1 lift: a busy or rough week' },
+    { key: 'light',  name: 'Lighter week',       desc: 'About half' },
+    { key: 'cardio', name: 'Cardio comeback' },
+    { key: 'lift',   name: 'Lifting comeback' },
+    { key: 'move',   name: 'Just move',          desc: 'A busy or rough week' },
   ],
   planTargets(key) {
     const b = this.prefsBase();
     return {
-      full:   { z2Goal: b.z2Goal, hardGoal: b.hardGoal, liftGoal: b.liftGoal },
-      light:  { z2Goal: Math.round(b.z2Goal / 2), hardGoal: Math.max(1, Math.floor(b.hardGoal / 2)), liftGoal: Math.max(1, b.liftGoal - 1) },
-      cardio: { z2Goal: b.z2Goal, hardGoal: Math.max(1, b.hardGoal - 1), liftGoal: 1 },
-      lift:   { z2Goal: Math.round(b.z2Goal / 2), hardGoal: Math.max(1, b.hardGoal - 1), liftGoal: b.liftGoal },
-      move:   { z2Goal: Math.round(b.z2Goal / 2), hardGoal: 0, liftGoal: 1 },
+      full:   { aeroGoal: b.aeroGoal, hardGoal: b.hardGoal, liftGoal: b.liftGoal },
+      light:  { aeroGoal: Math.round(b.aeroGoal / 2), hardGoal: Math.max(1, Math.floor(b.hardGoal / 2)), liftGoal: Math.max(1, b.liftGoal - 1) },
+      cardio: { aeroGoal: b.aeroGoal, hardGoal: Math.max(1, b.hardGoal - 1), liftGoal: 1 },
+      lift:   { aeroGoal: Math.round(b.aeroGoal / 2), hardGoal: Math.max(1, b.hardGoal - 1), liftGoal: b.liftGoal },
+      move:   { aeroGoal: Math.round(b.aeroGoal / 2), hardGoal: 0, liftGoal: 1 },
     }[key];
+  },
+  planDesc(pl) {
+    const t = this.planTargets(pl.key);
+    const s = `${t.aeroGoal} aerobic min, ${t.hardGoal} hard, ${t.liftGoal} lift${t.liftGoal === 1 ? '' : 's'}`;
+    return pl.desc ? `${pl.desc}: ${s}` : s;
   },
   pickerHtml() {
     const comeback = this.needsComeback();
@@ -2742,7 +2761,7 @@ const Cardio = {
       <div class="text-sm text-dim mb-8">Your choice sets this week's targets. Hitting them keeps the streak going.</div>`;
     this.PLANS.forEach(pl => {
       h += `<button class="btn btn-outline btn-sm mb-8" style="width:100%;justify-content:space-between;text-align:left" onclick="Cardio.choosePlan('${pl.key}')">
-        <span><strong>${pl.name}</strong><br><span class="text-dim text-sm">${pl.desc}</span></span></button>`;
+        <span><strong>${pl.name}</strong><br><span class="text-dim text-sm">${pl.key === 'full' ? pl.desc : this.planDesc(pl)}</span></span></button>`;
     });
     const prog = Store.get('program', {}) || {};
     const easing = prog.easeUntil != null && (prog.currentDay || 0) < prog.easeUntil;
@@ -2780,7 +2799,7 @@ const Cardio = {
     document.querySelectorAll('.f-int').forEach(e => e.classList.toggle('hide', !t.intervals));
     if (!this.editing) document.getElementById('cardio-hard').checked = !!t.hard;
     const p = this.prefs();
-    document.getElementById('cardio-hr-label').textContent = t.z2 ? `Avg HR (Z2: ${p.z2Low}–${p.z2High})` : 'Avg HR';
+    document.getElementById('cardio-hr-label').textContent = `Avg HR (aerobic ${p.z2Low}+)`;
   },
   fields: { duration: 'cardio-dur', hr: 'cardio-hr', speed: 'cardio-speed', incline: 'cardio-incline', rounds: 'cardio-rounds', work: 'cardio-work', rest: 'cardio-rest', distance: 'cardio-dist', maxHr: 'cardio-maxhr' },
   resetForm() {
@@ -2859,12 +2878,12 @@ const Cardio = {
     let html = `<div class="card">
       <div class="row" style="justify-content:space-between"><div class="card-title" style="margin:0">This week</div><span class="text-dim text-sm">${daysLeft + 1} day${daysLeft ? 's' : ''} left incl. today</span></div>
       ${this.weekCard(false)}
-      <table class="wk-table"><tr class="text-dim"><td>Week of</td><td>Zone 2</td><td>Hard</td><td>Lifts</td><td></td></tr>`;
+      <table class="wk-table"><tr class="text-dim"><td>Week of</td><td>Aerobic</td><td>Hard</td><td>Lifts</td><td></td></tr>`;
     for (let i = 1; i <= 6; i++) {
       const w = addDays(ws, -7 * i);
       const st = this.weekStats(w);
       const hit = this.weekHit(w);
-      html += `<tr><td>${parseLocal(w).toLocaleDateString([], { month: 'short', day: 'numeric' })}</td><td>${st.z2} min</td><td>${st.hard}</td><td>${st.lifts}</td><td>${hit ? '<span style="color:var(--success)">✓</span>' : '<span class="text-dim">–</span>'}</td></tr>`;
+      html += `<tr><td>${parseLocal(w).toLocaleDateString([], { month: 'short', day: 'numeric' })}</td><td>${st.aero} min</td><td>${st.hard}</td><td>${st.lifts}</td><td>${hit ? '<span style="color:var(--success)">✓</span>' : '<span class="text-dim">–</span>'}</td></tr>`;
     }
     html += `</table></div>`;
     document.getElementById('cardio-week').innerHTML = html;
@@ -2872,16 +2891,17 @@ const Cardio = {
 
   renderEntry(c) {
     const t = this.typeOf(c);
-    const z2 = this.z2Min(c);
+    const aero = this.aeroMin(c), z2 = this.z2Min(c);
     const warn = this.hrWarning(c);
     const bits = [];
     if (c.speed) bits.push(c.speed + ' mph');
     if (c.incline) bits.push(c.incline + '% incline');
+    if (z2) bits.push(`Z2 ${z2}m`);
     if (c.rounds) bits.push(`${c.rounds} × ${c.work || '?'}s on / ${c.rest || '?'}s off`);
     return `<div class="cardio-entry" style="display:block">
       <div class="row" style="justify-content:space-between;align-items:flex-start">
         <div>
-          <div style="font-weight:600">${esc(t.label)}${c.source === 'strava' ? '<span class="chip chip-strava">Strava</span>' : ''}${this.isHard(c) ? '<span class="chip chip-hard">HARD</span>' : ''}${z2 ? `<span class="chip chip-z2">Z2 ${z2}m</span>` : ''}</div>
+          <div style="font-weight:600">${esc(t.label)}${c.source === 'strava' ? '<span class="chip chip-strava">Strava</span>' : ''}${this.isHard(c) ? '<span class="chip chip-hard">HARD</span>' : ''}${aero ? `<span class="chip chip-z2">${aero}m aerobic</span>` : ''}</div>
           <div class="text-dim text-sm">${parseLocal(c.date).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}${c.time ? ' ' + c.time : ''}${c.name ? ' · ' + esc(c.name) : ''}</div>
           ${bits.length ? `<div class="text-sm text-dim">${bits.join(' · ')}</div>` : ''}
           ${warn ? `<div class="text-sm"><span class="chip chip-warn" style="margin:0">${warn}</span></div>` : ''}
@@ -2933,10 +2953,10 @@ const BadNight = {
   open: false,
   OPTIONS: [
     { key: 'walk', title: '20-min walk', time: '20 min',
-      desc: 'Easy pace, outside or on the treadmill. Counts toward Zone 2 if your HR is in range.',
+      desc: 'Easy pace, outside or on the treadmill. Counts as aerobic minutes.',
       prefill: { type: 'z2-other', duration: 20, notes: 'Bad-night fallback: walk' } },
     { key: 'tread', title: 'Easy treadmill', time: '30 min',
-      desc: 'Low incline, conversational pace. Zone 2 only, no heroics.',
+      desc: 'Low incline, conversational pace. No heroics.',
       prefill: { type: 'z2-tread', duration: 30, notes: 'Bad-night fallback: easy treadmill' } },
     { key: 'swings', title: 'Swings + walk', time: '20 min',
       desc: '10 swings (60 lb) at the top of every minute for 10 minutes, then a 10-minute walk.',
@@ -2989,8 +3009,8 @@ const BadNight = {
 // ===================== TERRAIN + HEART RATE =====================
 // For a Strava activity: elevation profile and heart rate on one shared
 // distance axis (two stacked charts, never two y-scales), with each stretch
-// marked below / in / above Zone 2, so you can see which hill (or which flat
-// stretch) moved you out of zone.
+// marked below the aerobic floor / in Zone 2 / above it, so you can see which
+// hill (or which flat stretch) pushed the effort up.
 const Terrain = {
   open: {}, data: {}, hover: {},
   toggle(id) {
@@ -3029,7 +3049,7 @@ const Terrain = {
     return { pts, total, gain: Math.round(gain * 3.281), hasHr: hr.length > 0 };
   },
   zone(h, p) { return h == null ? 'none' : h < p.z2Low ? 'below' : h > p.z2High ? 'above' : 'in'; },
-  COLORS: { below: 'var(--primary)', in: 'var(--success)', above: 'var(--warning)', none: 'var(--surface3)' },
+  COLORS: { below: 'var(--primary)', in: 'var(--success)', above: 'var(--accent)', none: 'var(--surface3)' },
   html(c) {
     if (!this.open[c.id]) return '';
     const D = this.data[c.id];
@@ -3085,7 +3105,7 @@ const Terrain = {
       P.forEach(p => { const z = this.zone(p.hr, pr); if (t[z] != null) t[z] += p.sec; });
       const tot = t.below + t.in + t.above || 1, f = k => `${Math.round(t[k] / 60)} min (${Math.round(100 * t[k] / tot)}%)`;
       const key = k => `<svg width="10" height="10"><rect width="10" height="10" rx="2" fill="${this.COLORS[k]}"/></svg>`;
-      split = `<div class="text-sm mt-8">${key('below')} below Z2 ${f('below')} · ${key('in')} in Z2 ${f('in')} · ${key('above')} above Z2 ${f('above')}</div>`;
+      split = `<div class="text-sm mt-8">${key('below')} below ${pr.z2Low} ${f('below')} · ${key('in')} Z2 ${f('in')} · ${key('above')} above Z2 ${f('above')}</div>`;
     }
     this._x = this._x || {}; this._x[id] = P.map(p => x(p.mi) / W);
     return `<svg viewBox="0 0 ${W} ${Hall}" style="width:100%;height:auto;touch-action:pan-y" role="img" aria-label="Elevation and heart rate by distance" onpointermove="Terrain.pick(event,this,'${id}')" onclick="Terrain.pick(event,this,'${id}')">${svg}</svg>
@@ -3487,7 +3507,7 @@ const Settings = {
     document.getElementById('set-maxhr').value = p.maxHr;
     document.getElementById('set-z2low').value = p.z2Low;
     document.getElementById('set-z2high').value = p.z2High;
-    document.getElementById('set-z2goal').value = p.z2Goal;
+    document.getElementById('set-aerogoal').value = p.aeroGoal;
     document.getElementById('set-hardgoal').value = p.hardGoal;
     document.getElementById('set-liftgoal').value = p.liftGoal;
     Sync.setState(Sync.state);
@@ -3543,8 +3563,8 @@ const Settings = {
   saveCardio() {
     const profile = Store.get('profile', {}) || {};
     const n = id => parseInt(document.getElementById(id).value) || 0;
-    const c = { maxHr: n('set-maxhr') || 185, z2Low: n('set-z2low') || 111, z2High: n('set-z2high') || 130, z2Goal: n('set-z2goal') || 120, hardGoal: n('set-hardgoal') || 2, liftGoal: n('set-liftgoal') || 4 };
-    if (c.z2Low >= c.z2High) { alert('Zone 2 low must be below high.'); return; }
+    const c = { maxHr: n('set-maxhr') || 185, z2Low: n('set-z2low') || 111, z2High: n('set-z2high') || 130, aeroGoal: n('set-aerogoal') || 150, hardGoal: n('set-hardgoal') || 2, liftGoal: n('set-liftgoal') || 4 };
+    if (c.z2Low >= c.z2High) { alert('Aerobic floor must be below Zone 2 high.'); return; }
     profile.cardio = c;
     Store.set('profile', profile);
     alert('Weekly goals updated!');
