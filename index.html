@@ -2074,6 +2074,10 @@ const Workout = {
     if (yd) return this.askLaps(ei, si, next, next2);
     const chips = [];
     for (let n = Math.max(1, lo - 3); n <= hi + 2; n++) chips.push(n);
+    // Usually the same as the set before: mark that number.
+    const before = ex.sets.slice(0, si).reverse().find(x => x.done && typeof x.actualReps === 'number' && !x.isWarmup);
+    const lastReps = before ? before.actualReps : null;
+    if (lastReps && !chips.includes(lastReps)) { chips.push(lastReps); chips.sort((a, b) => a - b); }
     let el = document.getElementById('reps-sheet');
     if (el) el.remove();
     el = document.createElement('div');
@@ -2082,7 +2086,8 @@ const Workout = {
       <div style="font-weight:700;font-size:1.1rem">${esc(this.setName(ei, si))}: ${yd ? 'yards per side?' : 'how many reps?'}</div>
       <div class="text-dim text-sm mt-8">${s.actualWeight > 0 ? s.actualWeight + ' lb · ' : ''}goal ${esc(String(s.goalReps))}${s.tut ? ' · ' + s.tut + 's' : ''}</div>
       ${next >= 0 ? `<label class="text-sm mt-8" style="display:flex;align-items:center;gap:8px"><input type="checkbox" class="b2b" style="width:22px;height:22px"> That was 2 sets back-to-back (logs ${esc(this.setName(ei, next))} too, splitting the time)</label>` : ''}
-      <div class="chips">${chips.map(n => `<button class="${yd ? (n === lo ? 'in' : '') : (n >= lo && n <= hi ? 'in' : '')}" data-n="${n}">${n}</button>`).join('')}</div>
+      <div class="chips">${chips.map(n => `<button class="${n === lastReps ? 'in' : (!lastReps && n >= lo && n <= hi ? 'in' : '')}" ${n === lastReps ? 'style="background:var(--primary);color:#fff"' : ''} data-n="${n}">${n}</button>`).join('')}</div>
+      ${lastReps ? `<div class="text-sm text-dim" style="margin-top:-6px;margin-bottom:10px">Last set: ${lastReps}</div>` : ''}
       <div class="row gap-8"><input type="number" inputmode="numeric" placeholder="Other" class="flex-1 other"><button class="btn btn-sm btn-success" style="width:auto">Save</button></div>
     </div>`;
     const done = n => {
@@ -3662,7 +3667,27 @@ function timelineHtml(w) {
   });
   rows.sort((a, b) => a.s.startedAt - b.s.startedAt);
   const clock = t => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  let html = '', prev = null;
+  // Rest between sets, per exercise (supersets as one group). Changeovers left out.
+  const groups = new Map();
+  let prevR = null;
+  rows.forEach(r => {
+    if (prevR && r.key === prevR.key) {
+      const gap = Math.round((r.s.startedAt - prevR.s.endedAt) / 1000);
+      if (gap > 0) { if (!groups.has(r.key)) groups.set(r.key, []); groups.get(r.key).push(gap); }
+    }
+    prevR = r;
+  });
+  let html = '';
+  if (groups.size) {
+    const name = k => rows.find(r => r.key === k).ex.pair ? [...new Set(rows.filter(r => r.key === k).map(r => r.ex.name))].join(' + ') : k;
+    html += `<div class="text-sm" style="font-weight:700;margin-bottom:4px">Rest between sets</div>`;
+    groups.forEach((g, k) => {
+      const avg = Math.round(g.reduce((a, b) => a + b, 0) / g.length);
+      html += `<div class="text-sm" style="display:flex;gap:8px"><span style="flex:1">${esc(name(k))}</span><span>avg <strong>${fmtTime(avg)}</strong></span><span class="text-dim" style="width:86px;text-align:right">${g.length > 1 ? `${fmtTime(Math.min(...g))}–${fmtTime(Math.max(...g))}` : ''}</span></div>`;
+    });
+    html += `<div style="border-top:1px solid var(--surface2);margin:8px 0"></div>`;
+  }
+  let prev = null;
   rows.forEach(r => {
     if (prev) {
       const gap = Math.round((r.s.startedAt - prev.s.endedAt) / 1000);
