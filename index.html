@@ -1892,11 +1892,11 @@ const Workout = {
           </div>
           <div class="set-goal">${ex.name === 'Pullups' ? `${({ none: 'No band', green: 'Green', black: 'Black', both: 'Both' })[s.band || ex.band || 'none']}<br>${s.goalReps}` : s.goalWeight > 0 ? s.goalWeight + ' × ' + s.goalReps : s.goalReps + ' reps'}</div>
           <div class="set-actual">
-            <button class="adj" onclick="Workout.adjWeight(${ei},${si},-5)">-</button>
+            ${ex.inputType === 'reps_only' || ex.inputType === 'timed' ? '' : `<button class="adj" onclick="Workout.adjWeight(${ei},${si},-5)">-</button>
             <input type="number" value="${s.actualWeight}" step="5"
               onchange="Workout.setWeight(${ei},${si},this.value)"
               ${done ? 'style="opacity:.6"' : ''}>
-            <span class="x">×</span>
+            <span class="x">×</span>`}
             <button class="adj" onclick="Workout.adjReps(${ei},${si},-1)">-</button>
             <input type="number" value="${typeof s.actualReps === 'string' ? '' : s.actualReps}" step="1"
               placeholder="${typeof s.goalReps === 'string' ? s.goalReps : ''}"
