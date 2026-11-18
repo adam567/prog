@@ -1614,6 +1614,7 @@ const Progress = {
         return `<button class="band-btn mt-8" onclick="History.mode()==='timeline'?History.setMode('exercise'):History.setMode('timeline');Home.render()">${on ? 'Hide timeline' : 'Show timeline'}</button>${on ? `<div class="mt-8">${timelineHtml(w)}</div>` : ''}`; })()}
       ${s.volume && s.volume.total ? `<div class="text-sm mt-8">Total volume: <strong>${fmtVol(s.volume.total)}</strong>${s.volume.bwPart ? ` <span class="text-dim">(incl. ${fmtVol(s.volume.bwPart)} from bodyweight moves)</span>` : ''}</div>` : ''}
       ${s.rest ? `<div class="text-sm mt-8">Rests on time: ${s.rest}</div>` : ''}
+      ${this.stravaRow()}
       ${(s.maxOffer || []).map(o => `<div style="border-top:1px solid var(--surface2);margin-top:10px;padding-top:10px">
         <div class="text-sm">${liftName(o.lift)}: you lifted ${o.used} where ${o.goal} was planned. Set the ${liftName(o.lift).toLowerCase()} working max ${o.from} → <strong>${o.to}</strong> so the program builds from what you lifted?</div>
         <div class="row gap-8 mt-8"><button class="band-btn" style="padding:8px 10px" onclick="Progress.applyMax('${o.lift}',${o.to})">Set ${o.to}</button><button class="band-btn" style="padding:8px 10px" onclick="Progress.dropOffer('${o.lift}')">Keep ${o.from}</button></div>
@@ -1622,6 +1623,20 @@ const Progress = {
       <div class="text-sm text-dim">This week: lifts ${s.week.lifts}/${s.week.liftGoal} · aerobic ${s.week.aero ?? 0}/${s.week.aeroGoal ?? 150} min · hard ${s.week.hard}/${s.week.hardGoal}</div>
       ${s.cardioAnswered ? '' : this.cardioNudge()}
     </div>`;
+  },
+  // Strava heart rate for the workout just finished, or a pull button until
+  // the Strava recording has been imported.
+  stravaRow() {
+    const ws = Store.get('workouts', []), wi = ws.length - 1, w = ws[wi];
+    if (!w) return '';
+    const g = HrView.match(w, Store.get('stravaGym', []));
+    const top = '<div style="border-top:1px solid var(--surface2);margin-top:10px;padding-top:10px">';
+    if (g && g.hr) return `${top}<div class="row" style="justify-content:space-between;align-items:center"><span class="text-sm"><span class="chip chip-strava" style="margin:0 4px 0 0">Strava</span>HR avg ${g.hr}${g.maxHr ? ' · max ' + g.maxHr : ''}</span>
+      ${g.startUtc ? `<button class="btn btn-outline btn-xs" style="width:auto" onclick="History.openHr(${wi})">Set-by-set HR</button>` : ''}</div></div>`;
+    const st = Strava.status;
+    if (!st || !st.connected) return '';
+    return `${top}<div class="text-sm text-dim mb-8">${Strava.busy ? 'Pulling from Strava…' : Strava.msg && g === undefined && Strava.msg.startsWith('Imported') ? 'No Strava recording matched this workout yet. If you just stopped it, give it a minute and pull again.' : 'Recorded it on Strava? Pull it in to see heart rate set by set.'}</div>
+      <button class="btn btn-primary btn-sm" ${Strava.busy ? 'disabled' : ''} onclick="Strava.pull()">${Strava.busy ? 'Pulling…' : 'Pull from Strava'}</button></div>`;
   },
   // Right after lifting: nudge toward this week's cardio, sized to what's left.
   cardioNudge() {
@@ -3606,6 +3621,7 @@ const Strava = {
     try { const r = await Sync.api('GET', '/api/strava/status'); this.status = r.ok ? await r.json() : null; }
     catch { this.status = null; }
     this.renderCard();
+    if (Nav.current === 'home' && Progress.lastSummary()) Home.render(); // summary card's Strava row
   },
   async connect() {
     try {
@@ -3628,6 +3644,7 @@ const Strava = {
   async pull() {
     if (this.busy) return;
     this.busy = true; this.msg = 'Pulling from Strava…'; this.renderCard();
+    if (Nav.current === 'home') Home.render();
     try {
       const profile = Store.get('profile', {}) || {};
       // Look back 3 weeks each time (catches edits and late heart-rate data); 45 days on first pull.
@@ -3673,6 +3690,7 @@ const Strava = {
     } catch (e) { this.msg = e.message; }
     this.busy = false;
     if (Nav.current === 'cardio') Cardio.render();
+    if (Nav.current === 'home') Home.render();
   },
   renderCard() {
     const el = document.getElementById('cardio-strava');
@@ -3691,6 +3709,15 @@ const Strava = {
 
 // ===================== HISTORY =====================
 const History = {
+  // From the post-workout card: jump to this workout in History with its HR chart open.
+  openHr(wi) {
+    Nav.go('history');
+    setTimeout(() => {
+      HrView.toggle(wi);
+      const el = document.getElementById('hrv-' + wi);
+      if (el) (el.closest('.card') || el).scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  },
   render() {
     const workouts = Store.get('workouts', []);
     const el = document.getElementById('history-content');
