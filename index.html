@@ -1912,7 +1912,7 @@ const Workout = {
             ${ex.sets.length > 1 ? `<button style="font-size:.6rem;color:var(--dim);background:none;border:none;cursor:pointer;padding:0;line-height:1" onclick="Workout.deleteSet(${ei},${si})">✕</button>` : ''}
             ${s.isAmrap ? `<span class="amrap-badge">AMRAP</span>` : `<span style="${s.isWarmup ? 'color:var(--dim)' : s.isBackoff ? 'color:var(--accent)' : s.isExtra ? 'color:var(--success)' : ''}">${lbl}</span>`}
           </div>
-          <div class="set-goal">${ex.name === 'Pullups' ? `${({ none: 'No band', green: 'Green', black: 'Black', both: 'Both' })[s.band || ex.band || 'none']}<br>${s.goalReps}` : s.goalWeight > 0 ? s.goalWeight + ' × ' + s.goalReps : s.goalReps + ' reps'}</div>
+          <div class="set-goal">${ex.name === 'Pullups' ? `${({ none: 'No band', green: 'Green', black: 'Black', both: 'Both' })[s.band || ex.band || 'none']}<br>${s.goalReps}` : s.goalWeight > 0 ? s.goalWeight + ' × ' + s.goalReps : ex.inputType === 'timed' ? (s.done && s.tut ? fmtTime(s.tut) : s.goalReps) : s.goalReps + ' reps'}</div>
           <div class="set-actual">
             ${ex.inputType === 'reps_only' || ex.inputType === 'timed' ? (BW_LOAD[ex.name] ? `<span class="text-dim text-sm" style="margin-right:6px" title="${Math.round(BW_LOAD[ex.name] * 100)}% of bodyweight">≈${Math.round(BW_LOAD[ex.name] * bodyweight())} lb</span>` : '') : `<button class="adj" onclick="Workout.adjWeight(${ei},${si},-5)">-</button>
             <input type="number" value="${s.actualWeight}" step="5"
@@ -2125,7 +2125,7 @@ const Workout = {
   needsReps(s) { return !(typeof s.actualReps === 'number' && s.actualReps > 0); },
   askReps(ei, si) {
     const s = this.data.exercises[ei].sets[si];
-    if (!s || !this.needsReps(s)) return this.scrollToPairNext(ei);
+    if (!s || !this.needsReps(s) || this.data.exercises[ei].inputType === 'timed') return this.scrollToPairNext(ei);
     const m = String(s.goalReps || '').match(/(\d+)(?:\s*-\s*(\d+))?/);
     const lo = m ? +m[1] : 6, hi = m && m[2] ? +m[2] : lo;
     const yd = /yd|lap/.test(String(s.goalReps)); // carries: distance per side, not reps
@@ -2298,6 +2298,7 @@ const Workout = {
         return this.backfillSet(ei, si, a.tapAt);
       }
       s.tut = tut;
+      if (this.data.exercises[ei].inputType === 'timed') s.actualReps = fmtTime(tut);
       // Exact set window, for lining up with a Strava heart-rate trace.
       s.startedAt = a.startTime;
       s.endedAt = now;
@@ -3946,7 +3947,7 @@ const Settings = {
 const REP_CHIPS = { Pushups: [8, 20] };
 
 // One-tap adds on an ad hoc session, roughly easiest first.
-const ADHOC_PICKS = ['Pushups', 'KB Swing (60 lb)', 'KB Suitcase Carry (60 lb)', 'Box Jumps', 'Squat', 'Deadlift', 'Squat (light)', 'Deadlift (light)', 'Power Snatch', 'Snatch', 'Power Clean', 'Clean & Jerk', 'Pullups', 'Dead Hang'];
+const ADHOC_PICKS = ['Pushups', 'KB Swing (60 lb)', 'KB Suitcase Carry (60 lb)', 'Box Jumps', 'Squat', 'Deadlift', 'Squat (light)', 'Deadlift (light)', 'Power Snatch', 'Snatch', 'Power Clean', 'Clean & Jerk', 'Pullups', 'Heavy Bag', 'Dead Hang'];
 
 const CATALOG = [
   { cat: 'Main lifts', exercises: [
@@ -4024,6 +4025,7 @@ const CATALOG = [
     { name: 'Inverted Row',             inputType: 'reps_only', sets: 3, reps: 12,    rir: 2, defaultWeight: 0 },
   ]},
   { cat: 'Timed / Hold', exercises: [
+    { name: 'Heavy Bag',                inputType: 'timed',     sets: 1, reps: 'round', rir: null, defaultWeight: 0 },
     { name: 'Plank',                    inputType: 'timed',     sets: 3, reps: '60s',  rir: null, defaultWeight: 0 },
     { name: 'Dead Hang',                inputType: 'timed',     sets: 3, reps: 'max',  rir: null, defaultWeight: 0 },
     { name: 'Farmer Walk',              inputType: 'timed',     sets: 3, reps: '40s',  rir: null, defaultWeight: 0 },
