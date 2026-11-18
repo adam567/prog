@@ -2112,7 +2112,10 @@ const Workout = {
     const next2 = next < 0 ? -1 : ex.sets.findIndex((x, i) => i > next && !x.done);
     if (yd) return this.askLaps(ei, si, next, next2);
     const chips = [];
-    for (let n = Math.max(1, lo - 3); n <= hi + 2; n++) chips.push(n);
+    // Some exercises have their own one-tap range (pushups: never fewer than 8).
+    const fixed = REP_CHIPS[ex.name];
+    if (fixed) for (let n = fixed[0]; n <= fixed[1]; n++) chips.push(n);
+    else for (let n = Math.max(1, lo - 3); n <= hi + 2; n++) chips.push(n);
     // Usually the same as the set before: mark that number.
     const before = ex.sets.slice(0, si).reverse().find(x => x.done && typeof x.actualReps === 'number' && !x.isWarmup);
     const lastReps = before ? before.actualReps : null;
@@ -3916,6 +3919,9 @@ const Settings = {
 };
 
 // ===================== EXERCISE CATALOG =====================
+// Reps-sheet chip range per exercise, where the goal-based default is wrong.
+const REP_CHIPS = { Pushups: [8, 20] };
+
 // One-tap adds on an ad hoc session, roughly easiest first.
 const ADHOC_PICKS = ['Pushups', 'KB Swing (60 lb)', 'Box Jumps', 'Squat (light)', 'Deadlift (light)', 'Power Snatch', 'Snatch', 'Power Clean', 'Clean & Jerk', 'Dead Hang'];
 
