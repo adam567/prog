@@ -212,8 +212,8 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
 <!-- CARDIO PAGE -->
 <div id="page-cardio" class="page">
   <div class="brand-header"><div class="brand-logo">PH3</div><div><h1>Cardio Log</h1><div class="brand-sub">Track your conditioning</div></div></div>
-  <div id="cardio-week"></div>
   <div class="card" id="cardio-strava"></div>
+  <div id="cardio-week"></div>
   <div class="card" id="cardio-form-card">
     <div class="card-title" id="cardio-form-title">Log a session</div>
     <div class="row gap-8">
@@ -3679,7 +3679,8 @@ const Strava = {
     el.classList.remove('hide');
     el.innerHTML = s.connected
       ? `<div class="row" style="justify-content:space-between"><span class="text-sm"><span class="chip chip-strava" style="margin:0">Strava</span> ${esc(s.athlete || 'connected')}</span>
-           <button class="btn btn-outline btn-sm" ${this.busy ? 'disabled' : ''} onclick="Strava.pull()">${this.busy ? 'Pulling…' : 'Pull activities'}</button></div>
+           </div>
+         <button class="btn btn-primary mt-8" ${this.busy ? 'disabled' : ''} onclick="Strava.pull()">${this.busy ? 'Pulling…' : 'Pull from Strava'}</button>
          ${this.msg ? `<div class="text-sm text-dim mt-8">${esc(this.msg)}</div>` : ''}`
       : `<button class="btn btn-outline btn-sm" onclick="Strava.connect()">Connect Strava</button>`;
   },
