@@ -702,6 +702,26 @@ function syncBandWeight(ex) {
 // Weights typed with a comma ("244,7") or a decimal point both work.
 function parseLb(v) { const n = parseFloat(String(v == null ? '' : v).trim().replace(',', '.')); return n > 0 ? Math.round(n * 10) / 10 : 0; }
 const fmtLb = v => (Math.round(v * 10) / 10).toFixed(1);
+// Share of bodyweight your arms/hands actually move on bodyweight exercises.
+// Pushups ~64% at the top of a standard pushup (Ebben et al. 2011, force
+// plate); dips move nearly all of you; chin-ups all of you. Pull-ups already
+// log bodyweight minus the band as their weight.
+const BW_LOAD = { Pushups: 0.64, Dips: 0.95, 'Chin-ups': 1 };
+// Load for one set: the logged weight, else the bodyweight share above.
+function setLoad(name, s, bw) { return s.actualWeight > 0 ? s.actualWeight : BW_LOAD[name] ? Math.round(BW_LOAD[name] * bw) : 0; }
+// Total volume (load x reps) of a workout record, all done sets incl. warm-ups.
+// Carries (yards) and timed holds don't have reps, so they're left out.
+function workoutVolume(w) {
+  const bw = w.bodyweight || bodyweight();
+  let total = 0, bwPart = 0;
+  (w.exercises || []).forEach(e => (e.sets || []).forEach(s => {
+    const r = typeof s.actualReps === 'number' ? s.actualReps : /^\d+$/.test(String(s.actualReps)) ? +s.actualReps : 0;
+    const v = setLoad(e.name, s, bw) * r;
+    total += v; if (!(s.actualWeight > 0) && BW_LOAD[e.name]) bwPart += v;
+  }));
+  return { total: Math.round(total), bwPart: Math.round(bwPart) };
+}
+const fmtVol = v => v.toLocaleString() + ' lb';
 function bodyweight() { return (Store.get('profile', {}) || {}).bodyweight || 230; }
 function addDays(dateStr, n) { const d = parseLocal(dateStr); d.setDate(d.getDate() + n); return localDate(d); }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
@@ -1592,6 +1612,7 @@ const Progress = {
       ${lines}
       ${(() => { const w = Store.get('workouts', []).slice(-1)[0]; if (!w || !(w.exercises || []).some(e => (e.sets || []).some(x => x.startedAt))) return ''; const on = History.mode() === 'timeline';
         return `<button class="band-btn mt-8" onclick="History.mode()==='timeline'?History.setMode('exercise'):History.setMode('timeline');Home.render()">${on ? 'Hide timeline' : 'Show timeline'}</button>${on ? `<div class="mt-8">${timelineHtml(w)}</div>` : ''}`; })()}
+      ${s.volume && s.volume.total ? `<div class="text-sm mt-8">Total volume: <strong>${fmtVol(s.volume.total)}</strong>${s.volume.bwPart ? ` <span class="text-dim">(incl. ${fmtVol(s.volume.bwPart)} from bodyweight moves)</span>` : ''}</div>` : ''}
       ${s.rest ? `<div class="text-sm mt-8">Rests on time: ${s.rest}</div>` : ''}
       ${(s.maxOffer || []).map(o => `<div style="border-top:1px solid var(--surface2);margin-top:10px;padding-top:10px">
         <div class="text-sm">${liftName(o.lift)}: you lifted ${o.used} where ${o.goal} was planned. Set the ${liftName(o.lift).toLowerCase()} working max ${o.from} → <strong>${o.to}</strong> so the program builds from what you lifted?</div>
@@ -1646,6 +1667,7 @@ const Progress = {
         adhocSets: (record.exercises || []).reduce((t, e) => t + e.sets.length, 0),
         adhocLines: (record.exercises || []).filter(e => e.sets.length).map(e => `${e.name}: ${e.sets.map(s => (s.actualWeight > 0 ? s.actualWeight + '×' : '') + s.actualReps).join(', ')}`),
       } : {}),
+      volume: workoutVolume(record),
       auto, dayLabel: record.dayLabel, duration: record.duration, plannedMin: record.plannedMin, session: (Store.get('program', {}) || {}).currentDay || 0,
       lifts, maxOffer, rest: t.restPeriods ? `${t.restPeriods - t.restOver} of ${t.restPeriods} (avg ${fmtTime(t.avgRest)})` : '',
       schedule: st.text, tone: st.tone,
@@ -1892,7 +1914,7 @@ const Workout = {
           </div>
           <div class="set-goal">${ex.name === 'Pullups' ? `${({ none: 'No band', green: 'Green', black: 'Black', both: 'Both' })[s.band || ex.band || 'none']}<br>${s.goalReps}` : s.goalWeight > 0 ? s.goalWeight + ' × ' + s.goalReps : s.goalReps + ' reps'}</div>
           <div class="set-actual">
-            ${ex.inputType === 'reps_only' || ex.inputType === 'timed' ? '' : `<button class="adj" onclick="Workout.adjWeight(${ei},${si},-5)">-</button>
+            ${ex.inputType === 'reps_only' || ex.inputType === 'timed' ? (BW_LOAD[ex.name] ? `<span class="text-dim text-sm" style="margin-right:6px" title="${Math.round(BW_LOAD[ex.name] * 100)}% of bodyweight">≈${Math.round(BW_LOAD[ex.name] * bodyweight())} lb</span>` : '') : `<button class="adj" onclick="Workout.adjWeight(${ei},${si},-5)">-</button>
             <input type="number" value="${s.actualWeight}" step="5"
               onchange="Workout.setWeight(${ei},${si},this.value)"
               ${done ? 'style="opacity:.6"' : ''}>
@@ -3681,7 +3703,7 @@ const History = {
           <span style="font-weight:700">${w.adhoc ? 'Ad hoc session' : `Day ${w.dayLabel}: ${w.dayName}`}</span>
           <span class="text-dim text-sm">${w.date}</span>
         </div>
-        <div class="text-sm text-dim mb-8">${w.adhoc ? 'Off-program' : `Week ${w.absWeek}`} &middot;${w.duration} min ${w.completed ? '' : '(partial)'}${w.timer ? ` &middot; work ${Math.round(w.timer.totalWork/60)}m / rest ${Math.round(w.timer.totalRest/60)}m${(rt => rt ? ` &middot; avg rest ${fmtTime(rt.avgRest)} &middot; ${rt.restPeriods - rt.restOver}/${rt.restPeriods} rests on time${rt.restOver ? ' &middot; <span style="color:var(--danger)">' + rt.restOver + ' over limit</span>' : ''}${rt.changeovers ? ` &middot; ${rt.changeovers} changeover${rt.changeovers === 1 ? "" : "s"} (avg ${fmtTime(rt.avgChangeover)})` : ''}` : '')(workoutRest(w))}` : ''}</div>`;
+        <div class="text-sm text-dim mb-8">${w.adhoc ? 'Off-program' : `Week ${w.absWeek}`} &middot; ${w.duration} min ${w.completed ? '' : '(partial)'}${(v => v ? ` &middot; vol ${fmtVol(v)}` : '')(workoutVolume(w).total)}${w.timer ? ` &middot; work ${Math.round(w.timer.totalWork/60)}m / rest ${Math.round(w.timer.totalRest/60)}m${(rt => rt ? ` &middot; avg rest ${fmtTime(rt.avgRest)} &middot; ${rt.restPeriods - rt.restOver}/${rt.restPeriods} rests on time${rt.restOver ? ' &middot; <span style="color:var(--danger)">' + rt.restOver + ' over limit</span>' : ''}${rt.changeovers ? ` &middot; ${rt.changeovers} changeover${rt.changeovers === 1 ? "" : "s"} (avg ${fmtTime(rt.avgChangeover)})` : ''}` : '')(workoutRest(w))}` : ''}</div>`;
       const hrRec = HrView.match(w, gym);
       if (hrRec && hrRec.hr) {
         const timed = (w.exercises || []).some(e => (e.sets || []).some(st => st.startedAt));
