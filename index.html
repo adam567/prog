@@ -2547,7 +2547,7 @@ const Workout = {
     }
     const ex = {
       name: entry.name,
-      lift: null,
+      lift: entry.lift || null, // full main lifts count toward e1RM history
       isMain: false,
       rir: entry.rir != null ? entry.rir : null,
       inputType: entry.inputType || 'weight_reps',
@@ -2559,7 +2559,8 @@ const Workout = {
     for (let i = workouts.length - 1; i >= 0; i--) {
       const w = workouts[i];
       if (!w.exercises) continue;
-      const prev = w.exercises.find(e => e.name === entry.name);
+      // A program day's heavy main lift isn't a starting point for an off-plan one.
+      const prev = w.exercises.find(e => e.name === entry.name && !(entry.pctOf && e.isMain));
       if (prev && prev.sets && prev.sets.length) {
         const last = prev.sets.find(s => s.actualWeight > 0);
         if (last) {
@@ -3923,9 +3924,14 @@ const Settings = {
 const REP_CHIPS = { Pushups: [8, 20] };
 
 // One-tap adds on an ad hoc session, roughly easiest first.
-const ADHOC_PICKS = ['Pushups', 'KB Swing (60 lb)', 'Box Jumps', 'Squat (light)', 'Deadlift (light)', 'Power Snatch', 'Snatch', 'Power Clean', 'Clean & Jerk', 'Dead Hang'];
+const ADHOC_PICKS = ['Pushups', 'KB Swing (60 lb)', 'KB Suitcase Carry (60 lb)', 'Box Jumps', 'Squat', 'Deadlift', 'Squat (light)', 'Deadlift (light)', 'Power Snatch', 'Snatch', 'Power Clean', 'Clean & Jerk', 'Pullups', 'Dead Hang'];
 
 const CATALOG = [
+  { cat: 'Main lifts', exercises: [
+    { name: 'Squat',                    inputType: 'weight_reps', sets: 3, reps: 5, rir: 2, lift: 'squat',    pctOf: 'squat',    pct: 0.7 },
+    { name: 'Bench Press',              inputType: 'weight_reps', sets: 3, reps: 5, rir: 2, lift: 'bench',    pctOf: 'bench',    pct: 0.7 },
+    { name: 'Deadlift',                 inputType: 'weight_reps', sets: 3, reps: 5, rir: 2, lift: 'deadlift', pctOf: 'deadlift', pct: 0.7 },
+  ]},
   { cat: 'Light main lifts', exercises: [
     { name: 'Squat (light)',            inputType: 'weight_reps', sets: 3, reps: 5, rir: 4, pctOf: 'squat',    pct: 0.5 },
     { name: 'Deadlift (light)',         inputType: 'weight_reps', sets: 3, reps: 5, rir: 4, pctOf: 'deadlift', pct: 0.5 },
@@ -3981,6 +3987,8 @@ const CATALOG = [
     { name: 'KB Turkish Get-Up',        inputType: 'fixed_weight', sets: 2, reps: 3,  rir: 2,    defaultWeight: 40 },
     { name: 'KB Row (40 lb)',           inputType: 'fixed_weight', sets: 3, reps: 12, rir: 2,    defaultWeight: 40 },
     { name: 'KB Row (60 lb)',           inputType: 'fixed_weight', sets: 3, reps: 10, rir: 2,    defaultWeight: 60 },
+    { name: 'KB Suitcase Carry (40 lb)', inputType: 'fixed_weight', sets: 3, reps: '1 lap/side', rir: null, defaultWeight: 40 },
+    { name: 'KB Suitcase Carry (60 lb)', inputType: 'fixed_weight', sets: 3, reps: '1 lap/side', rir: null, defaultWeight: 60 },
   ]},
   { cat: 'Bodyweight', exercises: [
     { name: 'Pullups',                  inputType: 'reps_only', sets: 3, reps: 'max', rir: 2, defaultWeight: 0 },
@@ -4012,6 +4020,21 @@ const CATALOG = [
     { name: 'Calf Raise (Machine)',      inputType: 'weight_reps', sets: 4, reps: 12,  rir: 1, defaultWeight: 0 },
   ]},
 ];
+
+// Every exercise the program uses that the list above doesn't already have,
+// so anything from your program can be added on any day (ad hoc included).
+(() => {
+  const have = new Set(CATALOG.flatMap(c => c.exercises).map(e => e.name));
+  const extra = [];
+  BLOCKS.forEach(b => b.days.forEach(d => (d.acc || []).forEach(a => {
+    if (have.has(a.name)) return;
+    have.add(a.name);
+    const reps = Array.isArray(a.reps) ? a.reps.join('/') : (/^\d+$/.test(String(a.reps)) ? +a.reps : a.reps);
+    extra.push({ name: a.name, inputType: a.defaultWeight ? 'fixed_weight' : 'weight_reps', sets: a.sets, reps, rir: a.rir != null ? a.rir : null, defaultWeight: a.defaultWeight || 0 });
+  })));
+  extra.sort((x, y) => x.name.localeCompare(y.name));
+  if (extra.length) CATALOG.push({ cat: 'From your program', exercises: extra });
+})();
 
 // ===================== EXERCISE PICKER =====================
 const ExPicker = {
