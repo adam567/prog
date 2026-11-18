@@ -2862,9 +2862,11 @@ const Cardio = {
   weekStats(ws) {
     const we = addDays(ws, 7);
     const wk = this.list().filter(c => c.date >= ws && c.date < we);
-    const lifts = Store.get('workouts', []).filter(w => w.date >= ws && w.date < we).length;
+    // Ad hoc sessions are tracked but don't count toward the lifting goal.
+    const inWk = Store.get('workouts', []).filter(w => w.date >= ws && w.date < we);
+    const lifts = inWk.filter(w => !w.adhoc).length;
     return {
-      lifts,
+      lifts, adhoc: inWk.length - lifts,
       aero: wk.reduce((s, c) => s + this.aeroMin(c), 0),
       z2: wk.reduce((s, c) => s + this.z2Min(c), 0),
       hard: wk.filter(c => this.isHard(c)).length,
@@ -2932,6 +2934,7 @@ const Cardio = {
       <div class="text-sm">${this.pace(s.hard, p.hardGoal)}</div>
       <div class="goal-row" style="margin-top:10px"><span class="text-dim text-sm">Lifting sessions</span><span class="dots lift">${this.dots(s.lifts, p.liftGoal)}</span></div>
       <div class="text-sm">${this.pace(s.lifts, p.liftGoal)}</div>
+      ${s.adhoc ? `<div class="text-sm text-dim">Plus ${s.adhoc} ad hoc session${s.adhoc === 1 ? '' : 's'} (not counted)</div>` : ''}
       ${compact ? '' : `<div class="text-sm text-dim mt-8">Zone 2 (${p.z2Low}–${p.z2High}): ${s.z2} min · reference only</div>`}
       ${BadNight.restCount(ws) ? `<div class="text-sm text-dim mt-8">Recovery days by choice: ${BadNight.restCount(ws)}</div>` : ''}
       <div class="text-sm mt-8" style="color:${st ? 'var(--success)' : 'var(--dim)'}">${st ? `${st} week${st === 1 ? '' : 's'} in a row on target` : 'Streak starts the first week you hit all three'}</div>
