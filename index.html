@@ -182,7 +182,7 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
   <div class="input-group"><label>Squat 1RM (lb)</label><input type="number" id="setup-squat" value="285" step="5"></div>
   <div class="input-group"><label>Bench Press 1RM (lb)</label><input type="number" id="setup-bench" value="170" step="5"></div>
   <div class="input-group"><label>Deadlift 1RM (lb)</label><input type="number" id="setup-deadlift" value="285" step="5"></div>
-  <div class="input-group"><label>Bodyweight (lb)</label><input type="number" id="setup-bw" value="230" step="1"></div>
+  <div class="input-group"><label>Bodyweight (lb)</label><input type="number" id="setup-bw" value="230" step="0.1" inputmode="decimal"></div>
   <div class="input-group"><label>Rest Timer Nudge (seconds)</label><input type="number" id="setup-nudge" value="120" step="15"></div>
   <div class="input-group"><label>Ease-in after a layoff</label>
     <select id="setup-ramp">
@@ -263,7 +263,7 @@ input:focus,select:focus{outline:none;border-color:var(--primary)}
     <div class="input-group"><label>Squat</label><input type="number" id="set-squat" step="5"></div>
     <div class="input-group"><label>Bench</label><input type="number" id="set-bench" step="5"></div>
     <div class="input-group"><label>Deadlift</label><input type="number" id="set-deadlift" step="5"></div>
-    <div class="input-group"><label>Bodyweight</label><input type="number" id="set-bw" step="1"></div>
+    <div class="input-group"><label>Bodyweight</label><input type="number" id="set-bw" step="0.1" inputmode="decimal"></div>
     <div class="row gap-8"><div class="input-group flex-1"><label>Green band assist (lb)</label><input type="number" id="set-band-green" step="5"></div>
       <div class="input-group flex-1"><label>Black band assist (lb)</label><input type="number" id="set-band-black" step="5"></div></div>
     <div class="input-group"><label>Ease-in (lighter first weeks)</label>
@@ -699,6 +699,9 @@ function syncBandWeight(ex) {
   // Band is per set: changing it mid-exercise only affects sets not yet done.
   ex.sets.forEach(s => { if (!s.done) { s.band = ex.band || 'none'; s.goalWeight = w; s.actualWeight = w; } });
 }
+// Weights typed with a comma ("244,7") or a decimal point both work.
+function parseLb(v) { const n = parseFloat(String(v == null ? '' : v).trim().replace(',', '.')); return n > 0 ? Math.round(n * 10) / 10 : 0; }
+const fmtLb = v => (Math.round(v * 10) / 10).toFixed(1);
 function bodyweight() { return (Store.get('profile', {}) || {}).bodyweight || 230; }
 function addDays(dateStr, n) { const d = parseLocal(dateStr); d.setDate(d.getDate() + n); return localDate(d); }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
@@ -1112,10 +1115,14 @@ const Bodyweight = {
     return l;
   },
   set(lb) {
-    lb = Math.round(parseFloat(lb) * 10) / 10;
+    lb = parseLb(lb);
     if (!(lb > 50 && lb < 600)) return false;
     const p = Store.get('profile', {}) || {};
     const l = (p.bwLog || []).slice();
+    // Re-entering today's weight with the decimal the old input dropped
+    // (244 -> 244.7) corrects that entry instead of averaging the two.
+    const prev = l[l.length - 1];
+    if (prev && prev.date === localDate() && prev.lb === Math.floor(lb) && lb !== prev.lb) l.pop();
     l.push({ date: localDate(), at: Date.now(), lb });
     l.sort((x, y) => (x.at || parseLocal(x.date).getTime()) - (y.at || parseLocal(y.date).getTime()));
     p.bwLog = l;
@@ -1135,11 +1142,11 @@ const Bodyweight = {
   },
   refresh() { if (Nav.current === 'history') History.render(); else Home.render(); },
   prompt() {
-    const n = prompt('Bodyweight now (lb)', bodyweight());
+    const n = prompt('Bodyweight now (lb), e.g. 244.7', fmtLb(bodyweight()));
     if (n == null) return;
     if (!this.set(n)) { alert('Enter a weight in lb.'); return; }
     this.refresh();
-    toast(`Logged ${bodyweight()} lb`, 'Undo', () => Bodyweight.undo());
+    toast(`Logged ${fmtLb(bodyweight())} lb`, 'Undo', () => Bodyweight.undo());
   },
   // One value per day (mean of that day's weigh-ins), oldest first.
   daily() {
@@ -1170,7 +1177,7 @@ const Bodyweight = {
     const n = daysSince(d);
     return `last weighed ${n === 0 ? 'today' : n === 1 ? 'yesterday' : Schedule.fmt(d)}`;
   },
-  avgLabel(a) { return a.full ? `7-day avg ${a.lb}` : `avg ${a.lb} (${a.n} day${a.n === 1 ? '' : 's'} so far)`; },
+  avgLabel(a) { return a.full ? `7-day avg ${fmtLb(a.lb)}` : `avg ${fmtLb(a.lb)} (${a.n} day${a.n === 1 ? '' : 's'} so far)`; },
   // Change vs the latest entry at least ~30 days older (or the first entry).
   trend() {
     const l = this.daily();
@@ -1183,7 +1190,7 @@ const Bodyweight = {
   homeRow() {
     const t = this.trend(), avg = this.avgNow();
     const sub = [avg ? this.avgLabel(avg) : '', t, daysSince(this.lastWeighed()) > 0 ? this.lastLabel() : ''].filter(Boolean).join(' · ');
-    return `<div class="row mt-8" style="align-items:center;border-top:1px solid var(--surface2);padding-top:8px"><span class="flex-1 text-dim">Bodyweight${sub ? `<br><span class="text-sm">${sub}</span>` : ''}</span><span style="font-weight:700;margin-right:8px">${bodyweight()} lb</span><button class="btn-xs btn-outline" onclick="Bodyweight.prompt()">Update</button></div>`;
+    return `<div class="row mt-8" style="align-items:center;border-top:1px solid var(--surface2);padding-top:8px"><span class="flex-1 text-dim">Bodyweight${sub ? `<br><span class="text-sm">${sub}</span>` : ''}</span><span style="font-weight:700;margin-right:8px">${fmtLb(bodyweight())} lb</span><button class="btn-xs btn-outline" onclick="Bodyweight.prompt()">Update</button></div>`;
   },
   setRange(n) { this.range = n; this.hover = null; if (n === -1 && !this.from) { this.to = localDate(); this.from = addDays(this.to, -30); } History.render(); },
   setCustom() { this.from = document.getElementById('bw-from').value || null; this.to = document.getElementById('bw-to').value || null; this.hover = null; History.render(); },
@@ -1201,12 +1208,12 @@ const Bodyweight = {
     const W = 320, H = 150, L = 34, R = 8, T = 10, B = 22;
     const t0 = parseLocal(win.from).getTime(), t1 = Math.max(parseLocal(win.to).getTime(), t0 + 86400000);
     const vals = [...pts, ...avg].map(d => d.lb);
-    let lo = Math.floor(Math.min(...vals) - 1), hi = Math.ceil(Math.max(...vals) + 1);
-    if (hi - lo < 4) { const m = (hi + lo) / 2; lo = Math.floor(m - 2); hi = Math.ceil(m + 2); }
+    let lo = Math.floor((Math.min(...vals) - 0.5) * 2) / 2, hi = Math.ceil((Math.max(...vals) + 0.5) * 2) / 2;
+    if (hi - lo < 2) { const m = (hi + lo) / 2; lo = Math.floor((m - 1) * 2) / 2; hi = Math.ceil((m + 1) * 2) / 2; }
     const x = d => L + (W - L - R) * ((parseLocal(d).getTime() - t0) / (t1 - t0));
     const y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
-    const mid = Math.round((lo + hi) / 2);
-    const grid = [lo, mid, hi].map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="var(--surface2)" stroke-width="1"/><text x="${L - 4}" y="${(y(v) + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--dim)">${v}</text>`).join('');
+    const mid = Math.round((lo + hi) * 5) / 10;
+    const grid = [lo, mid, hi].map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="var(--surface2)" stroke-width="1"/><text x="${L - 4}" y="${(y(v) + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--dim)">${fmtLb(v)}</text>`).join('');
     const xl = `<text x="${L}" y="${H - 6}" font-size="9" fill="var(--dim)">${Schedule.fmt(win.from)}</text><text x="${W - R}" y="${H - 6}" text-anchor="end" font-size="9" fill="var(--dim)">${Schedule.fmt(win.to)}</text>`;
     const line = avg.length >= 2 ? `<polyline points="${avg.map(d => `${x(d.date).toFixed(1)},${y(d.lb).toFixed(1)}`).join(' ')}" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>` : '';
     const dots = pts.map(d => `<circle cx="${x(d.date).toFixed(1)}" cy="${y(d.lb).toFixed(1)}" r="3.5" fill="var(--dim)" stroke="var(--surface)" stroke-width="2"/>`).join('');
@@ -1216,7 +1223,7 @@ const Bodyweight = {
     if (h) {
       const a = avg.find(d => d.date === h.date);
       hov = `<line x1="${x(h.date).toFixed(1)}" x2="${x(h.date).toFixed(1)}" y1="${T}" y2="${H - B}" stroke="var(--dim)" stroke-width="1" stroke-dasharray="3 3"/><circle cx="${x(h.date).toFixed(1)}" cy="${y(h.lb).toFixed(1)}" r="5" fill="var(--text)" stroke="var(--surface)" stroke-width="2"/>`;
-      read = `${Schedule.fmt(h.date)}: <strong>${h.lb} lb</strong>${a ? ` · ${this.avgLabel(a)}` : ''}`;
+      read = `${Schedule.fmt(h.date)}: <strong>${fmtLb(h.lb)} lb</strong>${a ? ` · ${this.avgLabel(a)}` : ''}`;
     }
     this._pts = pts.map(d => x(d.date) / W);
     const legend = `<span><svg width="10" height="10"><circle cx="5" cy="5" r="3.5" fill="var(--dim)"/></svg> weigh-in</span> <span style="margin-left:10px"><svg width="16" height="10"><line x1="1" x2="15" y1="5" y2="5" stroke="var(--primary)" stroke-width="2"/></svg> 7-day avg (a day with no weigh-in carries the last weight)</span>`;
@@ -1243,11 +1250,11 @@ const Bodyweight = {
     const custom = this.range === -1 ? `<div class="row gap-8 mt-8" style="align-items:center"><input type="date" id="bw-from" value="${w.from}" onchange="Bodyweight.setCustom()" style="flex:1;min-width:0;width:100%;padding:6px;font-size:.85rem"><span class="text-dim">to</span><input type="date" id="bw-to" value="${w.to}" onchange="Bodyweight.setCustom()" style="flex:1;min-width:0;width:100%;padding:6px;font-size:.85rem"></div>` : '';
     const inWin = days.filter(d => d.date >= w.from && d.date <= w.to);
     const change = inWin.length >= 2 ? Math.round((inWin[inWin.length - 1].lb - inWin[0].lb) * 10) / 10 : null;
-    return `<div class="card"><div class="row" style="align-items:center"><div class="card-title flex-1" style="margin:0">Bodyweight</div><span style="font-weight:700;margin-right:8px">${bodyweight()} lb</span><button class="btn-xs btn-outline" onclick="Bodyweight.prompt()">Update</button></div>
+    return `<div class="card"><div class="row" style="align-items:center"><div class="card-title flex-1" style="margin:0">Bodyweight</div><span style="font-weight:700;margin-right:8px">${fmtLb(bodyweight())} lb</span><button class="btn-xs btn-outline" onclick="Bodyweight.prompt()">Update</button></div>
       <div class="text-sm text-dim">${[avg ? this.avgLabel(avg) : '', t, this.lastLabel()].filter(Boolean).join(' · ') || 'Log your weight to start a trend'}</div>
       <div class="row gap-8 mt-8" style="flex-wrap:wrap">${chips}</div>${custom}
       <div id="bw-chart">${this.chart()}</div>
-      ${change != null ? `<div class="text-sm mt-8">In this range: ${change > 0 ? '+' : ''}${change} lb over ${inWin.length} weigh-in days</div>` : ''}
+      ${change != null ? `<div class="text-sm mt-8">In this range: ${change > 0 ? '+' : ''}${change.toFixed(1)} lb over ${inWin.length} weigh-in days</div>` : ''}
     </div>`;
   },
 };
@@ -1580,7 +1587,8 @@ const Progress = {
     return `<div class="card" style="border-left:4px solid var(--success)">
       <div class="row" style="justify-content:space-between"><div class="card-title" style="margin:0">${s.auto ? 'Workout auto-ended' : 'Workout done'}</div><button class="skip-btn" onclick="Progress.dismiss()">✕</button></div>
       ${s.auto ? `<div class="text-sm" style="color:var(--warning)">${esc(s.auto)}</div>` : ''}
-      <div class="text-sm text-dim mb-8">Day ${s.dayLabel} · ${s.duration} min${s.plannedMin ? ` (planned ~${s.plannedMin})` : ''} · session ${s.session} of ${totalDays()}</div>
+      <div class="text-sm text-dim mb-8">${s.adhoc ? `Ad hoc · ${s.duration} min · ${s.adhocSets} set${s.adhocSets === 1 ? '' : 's'} · program unchanged` : `Day ${s.dayLabel} · ${s.duration} min${s.plannedMin ? ` (planned ~${s.plannedMin})` : ''} · session ${s.session} of ${totalDays()}`}</div>
+      ${s.adhoc ? (s.adhocLines || []).map(l => `<div class="text-sm">${esc(l)}</div>`).join('') : ''}
       ${lines}
       ${(() => { const w = Store.get('workouts', []).slice(-1)[0]; if (!w || !(w.exercises || []).some(e => (e.sets || []).some(x => x.startedAt))) return ''; const on = History.mode() === 'timeline';
         return `<button class="band-btn mt-8" onclick="History.mode()==='timeline'?History.setMode('exercise'):History.setMode('timeline');Home.render()">${on ? 'Hide timeline' : 'Show timeline'}</button>${on ? `<div class="mt-8">${timelineHtml(w)}</div>` : ''}`; })()}
@@ -1633,6 +1641,11 @@ const Progress = {
     const ws = Cardio.weekStats(weekStart(localDate())), p = Cardio.prefs(weekStart(localDate()));
     const st = Schedule.status();
     return {
+      ...(record.adhoc ? {
+        adhoc: true,
+        adhocSets: (record.exercises || []).reduce((t, e) => t + e.sets.length, 0),
+        adhocLines: (record.exercises || []).filter(e => e.sets.length).map(e => `${e.name}: ${e.sets.map(s => (s.actualWeight > 0 ? s.actualWeight + '×' : '') + s.actualReps).join(', ')}`),
+      } : {}),
       auto, dayLabel: record.dayLabel, duration: record.duration, plannedMin: record.plannedMin, session: (Store.get('program', {}) || {}).currentDay || 0,
       lifts, maxOffer, rest: t.restPeriods ? `${t.restPeriods - t.restOver} of ${t.restPeriods} (avg ${fmtTime(t.avgRest)})` : '',
       schedule: st.text, tone: st.tone,
@@ -1739,6 +1752,22 @@ const Workout = {
     const dayDef = blockDef.days[dayInWeek];
     const amrap = isAmrapDay(dayNum);
 
+    // Ad hoc: no plan, nothing prescribed. Add exercises as you go; the
+    // program doesn't advance and it isn't counted as a PH3 session.
+    if (opts.adhoc) {
+      Home.minutes = -1;
+      this.data = { dayNum, block, absWeek: null, dayLabel: 'Ad hoc', dayName: 'Ad hoc session', adhoc: true, isTestDay: false, lite: false, minutes: 0, plannedMin: 0, exercises: [], startTime: Date.now() };
+      this.save();
+      Timer.reset(); Timer.show(); Timer.updateUI();
+      Nav.current = 'workout';
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById('page-workout').classList.add('active');
+      document.querySelectorAll('#nav button').forEach(b => b.classList.remove('active'));
+      this.render();
+      Guard.startWatching();
+      return;
+    }
+
     const minutes = opts.minutes !== undefined ? opts.minutes : Home.minutes;
     const plan = Planner.build(dayNum, minutes, opts);
     const exercises = plan.exercises;
@@ -1796,9 +1825,10 @@ const Workout = {
             <div class="brand-logo" style="width:28px;height:28px;font-size:.6rem;border-radius:7px">PH3</div>
             <button class="btn-xs btn-outline" onclick="Workout.confirmExit()">Exit</button>
           </div>
-          <span class="text-sm">Wk ${d.absWeek} Day ${d.dayLabel}${rampFactor(d.absWeek, d.dayNum) < 1 ? ` · easing ${Math.round(rampFactor(d.absWeek, d.dayNum) * 100)}%` : ''}</span>
+          <span class="text-sm">${d.adhoc ? 'Off-program' : `Wk ${d.absWeek} Day ${d.dayLabel}${rampFactor(d.absWeek, d.dayNum) < 1 ? ` · easing ${Math.round(rampFactor(d.absWeek, d.dayNum) * 100)}%` : ''}`}</span>
         </div>
         <div style="font-weight:700;margin-top:4px">${d.dayName}${d.lite ? ' <span class="badge badge-amber">Lift-lite</span>' : ''}</div>
+        ${d.adhoc ? '<div class="text-sm text-dim">Add whatever you feel like, one set at a time. Keep it light; stop whenever.</div>' : ''}
         <div class="text-sm text-dim" id="wo-clock"></div>
       </div>
       <div style="padding-top:12px">`;
@@ -1900,8 +1930,16 @@ const Workout = {
         <div class="row gap-8" style="flex-wrap:wrap">${skipped.map(x => `<button class="band-btn" onclick="Workout.unskip(${x.i})">+ ${esc(x.e.name)}</button>`).join('')}</div></div>`;
     }
 
+    // Ad hoc: one-tap quick adds (anything already on the card is left out)
+    if (d.adhoc) {
+      const have = new Set(d.exercises.filter(e => !e.skipped).map(e => e.name));
+      const picks = ADHOC_PICKS.filter(n => !have.has(n));
+      if (picks.length) html += `<div class="card"><div class="text-sm text-dim mb-8">${d.exercises.length ? 'Feel like more?' : 'Start with something easy'}</div>
+        <div class="row gap-8" style="flex-wrap:wrap">${picks.map(n => `<button class="band-btn" onclick="Workout.addByName('${n.replace(/'/g, "\\'")}')">+ ${esc(n)}</button>`).join('')}</div></div>`;
+    }
+
     // Add custom exercise button
-    html += `<button class="btn btn-outline btn-sm mt-8 mb-16" onclick="Workout.addCustom()">+ Add Exercise</button>`;
+    html += `<button class="btn btn-outline btn-sm mt-8 mb-16" onclick="Workout.addCustom()">+ ${d.adhoc ? 'Other exercise' : 'Add Exercise'}</button>`;
 
     // Finish button
     const allMainDone = d.exercises.filter(e => e.isMain).every(e => e.sets.filter(s => !s.isWarmup && !s.isExtra && !s.isBackoff).every(s => s.done) || e.skipped);
@@ -1922,8 +1960,9 @@ const Workout = {
     const elapsed = Math.round((Date.now() - d.startTime) / 60000);
     let rem = 0;
     d.exercises.forEach(ex => { if (!ex.skipped) ex.sets.forEach(s => { if (!s.done) rem += s.isWarmup ? S.warm : ex.isMain ? S.main : S.acc; }); });
+    if (d.adhoc) { el.innerHTML = `${elapsed} min in`; return; }
     const remMin = Math.round(rem * f / 60);
-    const at = new Date(Date.now() + rem * f * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const at =new Date(Date.now() + rem * f * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     if (!d.minutes) { el.innerHTML = `${elapsed} min in · ~${remMin} min left · done ~${at}`; return; }
     const over = elapsed + remMin - d.minutes;
     el.innerHTML = `${elapsed} of ${d.minutes} min · done ~${at}` + (over > 3 ? ` · <span style="color:var(--warning)">~${over} min over</span>` : '');
@@ -2452,7 +2491,7 @@ const Workout = {
       actualWeight: last.actualWeight,
       actualReps: last.actualReps,
       isAmrap: false,
-      isExtra: !last.isBackoff && (!last.isWarmup || ex.sets.some(x => !x.isWarmup)),
+      isExtra: !this.data.adhoc && !last.isBackoff && (!last.isWarmup || ex.sets.some(x => !x.isWarmup)),
       isBackoff: !!last.isBackoff,
       isWarmup: false,
       done: false,
@@ -2481,13 +2520,23 @@ const Workout = {
 
   addCustom() { ExPicker.open(); },
 
+  addByName(name) {
+    const entry = CATALOG.flatMap(c => c.exercises).find(e => e.name === name);
+    if (entry) this.addFromCatalog(entry);
+  },
+
   addFromCatalog(entry) {
     const sets = [];
-    for (let i = 0; i < entry.sets; i++) {
+    // Light versions of the main lifts start at a share of the working max.
+    let w0 = entry.defaultWeight || 0;
+    if (entry.pctOf) w0 = Math.max(45, roundTo5((getMaxes(this.data.block)[entry.pctOf] || 0) * entry.pct));
+    // Ad hoc: one set at a time; nothing to "finish".
+    const n = this.data.adhoc ? 1 : entry.sets;
+    for (let i = 0; i < n; i++) {
       sets.push({
-        goalWeight: entry.defaultWeight || 0,
+        goalWeight: w0,
         goalReps: entry.reps,
-        actualWeight: entry.defaultWeight || 0,
+        actualWeight: w0,
         actualReps: entry.reps,
         isAmrap: false,
         done: false,
@@ -2558,6 +2607,7 @@ const Workout = {
       duration,
       completed,
       lite: !!d.lite,
+      ...(d.adhoc ? { adhoc: true } : {}),
       timer: timerSummary,
       minutes: d.minutes || 0,
       plannedMin: d.plannedMin || 0,
@@ -2595,9 +2645,11 @@ const Workout = {
     workouts.push(record);
     Store.set('workouts', workouts);
 
-    // Advance program
+    // Advance program (an ad hoc session never does)
     const prog = Store.get('program', {});
-    if (prog.deferredDay != null) {
+    if (d.adhoc) {
+      // leave the program where it is
+    } else if (prog.deferredDay != null) {
       // Just finished the swapped-in workout: go back to the deferred one,
       // and remember to skip past the swapped-in day afterwards.
       prog.resumeDay = (prog.currentDay || 0) + 1;
@@ -3116,6 +3168,8 @@ const Cardio = {
 const BadNight = {
   open: false,
   OPTIONS: [
+    { key: 'adhoc', title: 'Build as you go', time: 'open',
+      desc: 'Start with pushups and see how you feel. Add swings, box jumps, light squats or deadlifts, light snatches or clean & jerks, one set at a time. No plan, and the program stays where it is.' },
     { key: 'walk', title: '20-min walk', time: '20 min',
       desc: 'Easy pace, outside or on the treadmill. Counts as aerobic minutes.',
       prefill: { type: 'z2-other', duration: 20, notes: 'Bad-night fallback: walk' } },
@@ -3155,6 +3209,7 @@ const BadNight = {
     this.open = false;
     if (o.prefill) { Cardio.prefill = o.prefill; Nav.go('cardio'); return; }
     if (key === 'lite') { Workout.start({ lite: true }); return; }
+    if (key === 'adhoc') { Workout.start({ adhoc: true }); return; }
     if (key === 'rest') {
       const profile = Store.get('profile', {}) || {};
       profile.restDays = [...new Set([...(profile.restDays || []), localDate()])].slice(-120);
@@ -3619,10 +3674,10 @@ const History = {
       const wi = workouts.indexOf(w);
       html += `<div class="card">
         <div class="row" style="justify-content:space-between">
-          <span style="font-weight:700">Day ${w.dayLabel}: ${w.dayName}</span>
+          <span style="font-weight:700">${w.adhoc ? 'Ad hoc session' : `Day ${w.dayLabel}: ${w.dayName}`}</span>
           <span class="text-dim text-sm">${w.date}</span>
         </div>
-        <div class="text-sm text-dim mb-8">Week ${w.absWeek} &middot; ${w.duration} min ${w.completed ? '' : '(partial)'}${w.timer ? ` &middot; work ${Math.round(w.timer.totalWork/60)}m / rest ${Math.round(w.timer.totalRest/60)}m${(rt => rt ? ` &middot; avg rest ${fmtTime(rt.avgRest)} &middot; ${rt.restPeriods - rt.restOver}/${rt.restPeriods} rests on time${rt.restOver ? ' &middot; <span style="color:var(--danger)">' + rt.restOver + ' over limit</span>' : ''}${rt.changeovers ? ` &middot; ${rt.changeovers} changeover${rt.changeovers === 1 ? "" : "s"} (avg ${fmtTime(rt.avgChangeover)})` : ''}` : '')(workoutRest(w))}` : ''}</div>`;
+        <div class="text-sm text-dim mb-8">${w.adhoc ? 'Off-program' : `Week ${w.absWeek}`} &middot;${w.duration} min ${w.completed ? '' : '(partial)'}${w.timer ? ` &middot; work ${Math.round(w.timer.totalWork/60)}m / rest ${Math.round(w.timer.totalRest/60)}m${(rt => rt ? ` &middot; avg rest ${fmtTime(rt.avgRest)} &middot; ${rt.restPeriods - rt.restOver}/${rt.restPeriods} rests on time${rt.restOver ? ' &middot; <span style="color:var(--danger)">' + rt.restOver + ' over limit</span>' : ''}${rt.changeovers ? ` &middot; ${rt.changeovers} changeover${rt.changeovers === 1 ? "" : "s"} (avg ${fmtTime(rt.avgChangeover)})` : ''}` : '')(workoutRest(w))}` : ''}</div>`;
       const hrRec = HrView.match(w, gym);
       if (hrRec && hrRec.hr) {
         const timed = (w.exercises || []).some(e => (e.sets || []).some(st => st.startedAt));
@@ -3760,7 +3815,7 @@ const Settings = {
     ['A', 'C', 'D'].forEach(k => { const v = parseInt(document.getElementById('set-fill' + k).value) || 0; if (v) prog.fillSets[k] = v; });
     Store.set('program', prog);
     const profile = Store.get('profile', {}) || {};
-    const bwIn = parseFloat(document.getElementById('set-bw').value);
+    const bwIn = parseLb(document.getElementById('set-bw').value);
     if (bwIn && bwIn !== profile.bodyweight) { Bodyweight.set(bwIn); Object.assign(profile, Store.get('profile', {})); }
     profile.bands = {
       green: parseInt(document.getElementById('set-band-green').value) || BAND_DEFAULTS.green,
@@ -3861,7 +3916,26 @@ const Settings = {
 };
 
 // ===================== EXERCISE CATALOG =====================
+// One-tap adds on an ad hoc session, roughly easiest first.
+const ADHOC_PICKS = ['Pushups', 'KB Swing (60 lb)', 'Box Jumps', 'Squat (light)', 'Deadlift (light)', 'Power Snatch', 'Snatch', 'Power Clean', 'Clean & Jerk', 'Dead Hang'];
+
 const CATALOG = [
+  { cat: 'Light main lifts', exercises: [
+    { name: 'Squat (light)',            inputType: 'weight_reps', sets: 3, reps: 5, rir: 4, pctOf: 'squat',    pct: 0.5 },
+    { name: 'Deadlift (light)',         inputType: 'weight_reps', sets: 3, reps: 5, rir: 4, pctOf: 'deadlift', pct: 0.5 },
+    { name: 'Bench (light)',            inputType: 'weight_reps', sets: 3, reps: 5, rir: 4, pctOf: 'bench',    pct: 0.5 },
+  ]},
+  { cat: 'Olympic (light)', exercises: [
+    { name: 'Snatch',                   inputType: 'weight_reps', sets: 5, reps: 2, rir: 4, defaultWeight: 45 },
+    { name: 'Power Snatch',             inputType: 'weight_reps', sets: 5, reps: 2, rir: 4, defaultWeight: 45 },
+    { name: 'Hang Power Snatch',        inputType: 'weight_reps', sets: 5, reps: 3, rir: 4, defaultWeight: 45 },
+    { name: 'Clean & Jerk',             inputType: 'weight_reps', sets: 5, reps: 1, rir: 4, defaultWeight: 45 },
+    { name: 'Power Clean',              inputType: 'weight_reps', sets: 5, reps: 2, rir: 4, defaultWeight: 45 },
+    { name: 'Hang Power Clean',         inputType: 'weight_reps', sets: 5, reps: 3, rir: 4, defaultWeight: 45 },
+    { name: 'Push Press',               inputType: 'weight_reps', sets: 3, reps: 5, rir: 4, defaultWeight: 45 },
+    { name: 'Push Jerk',                inputType: 'weight_reps', sets: 5, reps: 2, rir: 4, defaultWeight: 45 },
+    { name: 'Overhead Squat',           inputType: 'weight_reps', sets: 3, reps: 5, rir: 4, defaultWeight: 45 },
+  ]},
   { cat: 'Barbell', exercises: [
     { name: 'Front Squat',              inputType: 'weight_reps', sets: 3, reps: 8,   rir: 3, defaultWeight: 0 },
     { name: 'Pause Squat',              inputType: 'weight_reps', sets: 3, reps: 5,   rir: 2, defaultWeight: 0 },
@@ -4051,7 +4125,7 @@ const App = {
       squat: parseInt(document.getElementById('setup-squat').value) || 285,
       bench: parseInt(document.getElementById('setup-bench').value) || 170,
       deadlift: parseInt(document.getElementById('setup-deadlift').value) || 285,
-      bodyweight: parseInt(document.getElementById('setup-bw').value) || 230,
+      bodyweight: parseLb(document.getElementById('setup-bw').value) || 230,
       nudge: parseInt(document.getElementById('setup-nudge').value) || 120,
     };
     Store.set('profile', profile);
