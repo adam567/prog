@@ -1905,7 +1905,7 @@ const Workout = {
       let nW = 0, nS = 0, nX = 0, nB = 0;
       ex.sets.forEach((s, si) => {
         const done = s.done;
-        const lbl = s.isWarmup ? `W${++nW}` : s.isBackoff ? `↓${++nB}` : s.isExtra ? `+${++nX}` : `S${++nS}`;
+        const lbl = ex.inputType === 'timed' && !s.isWarmup ? `R${++nS}` : s.isWarmup ? `W${++nW}` : s.isBackoff ? `↓${++nB}` : s.isExtra ? `+${++nX}` : `S${++nS}`;
         const isNext = upNext && upNext.ei === ei && upNext.si === si;
         html += `<div class="set-row" id="set-${ei}-${si}"${isNext ? ' style="background:rgba(247,37,133,.08);border-radius:8px"' : ''}>
           <div class="set-label" style="display:flex;align-items:center;gap:2px">
@@ -1919,12 +1919,12 @@ const Workout = {
               onchange="Workout.setWeight(${ei},${si},this.value)"
               ${done ? 'style="opacity:.6"' : ''}>
             <span class="x">×</span>`}
-            <button class="adj" onclick="Workout.adjReps(${ei},${si},-1)">-</button>
+            ${ex.inputType === 'timed' ? `<span class="text-dim text-sm">${done ? 'logged' : 'tap ▶ to start, ■ to stop'}</span>` : `<button class="adj" onclick="Workout.adjReps(${ei},${si},-1)">-</button>
             <input type="number" value="${typeof s.actualReps === 'string' ? '' : s.actualReps}" step="1"
               placeholder="${typeof s.goalReps === 'string' ? s.goalReps : ''}"
               onchange="Workout.setReps(${ei},${si},this.value)"
               ${done ? 'style="opacity:.6"' : ''}>
-            <button class="adj" onclick="Workout.adjReps(${ei},${si},1)">+</button>
+            <button class="adj" onclick="Workout.adjReps(${ei},${si},1)">+</button>`}
           </div>
           <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
             ${done
