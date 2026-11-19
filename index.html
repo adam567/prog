@@ -2110,7 +2110,7 @@ const Workout = {
       <div style="font-weight:700;font-size:1.1rem">${esc(this.setName(ei, si))}: how many laps per hand?</div>
       <div class="text-dim text-sm mt-8">1 lap = ${lap} yd/side${s.actualWeight > 0 ? ' · ' + s.actualWeight + ' lb' : ''}${s.tut ? ' · ' + s.tut + 's' : ''}</div>
       <div class="chips" style="grid-template-columns:repeat(${max},1fr)">${[1, 2, 3].slice(0, max).map(n => `<button class="${n === 1 ? 'in' : ''}" data-n="${n}">${n} lap${n > 1 ? 's' : ''}<div class="text-sm" style="font-weight:400">${n > 1 ? n + ' sets' : '1 set'}</div></button>`).join('')}</div>
-      <div class="row gap-8"><input type="number" inputmode="numeric" placeholder="Other: yd/side" class="flex-1 other"><button class="btn btn-sm btn-success" style="width:auto">Save</button></div>
+      <div class="row gap-8"><input type="number" inputmode="numeric" placeholder="Other: yd/side" class="flex-1 other"><button class="btn btn-sm btn-success" style="width:auto">Save 1 lap</button></div>
     </div>`;
     const finish = () => { this.save(); el.remove(); this.render(); };
     el.querySelectorAll('.chips button').forEach(b => b.onclick = () => {
@@ -2129,8 +2129,13 @@ const Workout = {
       finish();
     });
     const inp = el.querySelector('input.other');
-    const other = () => { const y = parseInt(inp.value); if (!(y > 0)) return; s.actualReps = `${y} yd/side`; s.yards = y; s.done = true; finish(); };
-    el.querySelector('.btn').onclick = other;
+    const other = () => {
+      const y = parseInt(inp.value);
+      if (!inp.value) return el.querySelector('.chips button').click(); // empty: 1 lap
+      if (!(y > 0)) return;
+      s.actualReps = `${y} yd/side`; s.yards = y; s.done = true; finish();
+    };
+    el.querySelector('.btn').onpointerdown = e => { e.preventDefault(); other(); };
     inp.onkeydown = e => { if (e.key === 'Enter') other(); };
     document.body.appendChild(el);
   },
@@ -2155,6 +2160,8 @@ const Workout = {
     const before = ex.sets.slice(0, si).reverse().find(x => x.done && typeof x.actualReps === 'number' && !x.isWarmup);
     const lastReps = before ? before.actualReps : null;
     if (lastReps && !chips.includes(lastReps)) { chips.push(lastReps); chips.sort((a, b) => a - b); }
+    // Save with the Other box empty saves this: last set's reps, else a single-number goal.
+    const dflt = lastReps || (lo === hi ? lo : null);
     let el = document.getElementById('reps-sheet');
     if (el) el.remove();
     el = document.createElement('div');
@@ -2165,7 +2172,7 @@ const Workout = {
       ${next >= 0 ? `<label class="text-sm mt-8" style="display:flex;align-items:center;gap:8px"><input type="checkbox" class="b2b" style="width:22px;height:22px"> That was 2 sets back-to-back (logs ${esc(this.setName(ei, next))} too, splitting the time)</label>` : ''}
       <div class="chips">${chips.map(n => `<button class="${n === lastReps ? 'in' : (!lastReps && n >= lo && n <= hi ? 'in' : '')}" ${n === lastReps ? 'style="background:var(--primary);color:#fff"' : ''} data-n="${n}">${n}</button>`).join('')}</div>
       ${lastReps ? `<div class="text-sm text-dim" style="margin-top:-6px;margin-bottom:10px">Last set: ${lastReps}</div>` : ''}
-      <div class="row gap-8"><input type="number" inputmode="numeric" placeholder="Other" class="flex-1 other"><button class="btn btn-sm btn-success" style="width:auto">Save</button></div>
+      <div class="row gap-8"><input type="number" inputmode="numeric" placeholder="Other" class="flex-1 other"><button class="btn btn-sm btn-success" style="width:auto">Save${dflt ? ' ' + dflt : ''}</button></div>
     </div>`;
     const done = n => {
       n = parseInt(n); if (!(n > 0)) return;
@@ -2188,8 +2195,15 @@ const Workout = {
     };
     el.querySelectorAll('.chips button').forEach(b => b.onclick = () => done(b.dataset.n));
     const inp = el.querySelector('input.other');
-    el.querySelector('.btn').onclick = () => done(inp.value);
-    inp.onkeydown = e => { if (e.key === 'Enter') done(inp.value); };
+    const save = () => {
+      if (inp.value) return done(inp.value);
+      if (dflt) return done(dflt);
+      inp.focus();
+    };
+    // pointerdown: fires before the keyboard closes and shifts the sheet down,
+    // which otherwise makes the first tap on Save miss.
+    el.querySelector('.btn').onpointerdown = e => { e.preventDefault(); save(); };
+    inp.onkeydown = e => { if (e.key === 'Enter') save(); };
     document.body.appendChild(el);
   },
 
