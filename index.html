@@ -2228,6 +2228,12 @@ const Workout = {
     if (this.emom && this.emom.ei === ei) { this.emomTap(); return; }
     if (this.isActive(ei, si)) { this.tapActive(); return; }
     if (!this.release(ei, si)) return;
+    // First Play of the workout: remind to start the Strava recording (HR).
+    if (!this.data.stravaReminded) {
+      this.data.stravaReminded = true;
+      this.save();
+      alert('Start Strava recording?\n\nThis is the first set of the workout. Start the Strava recording now so heart rate gets imported.');
+    }
     if (this.isEmom(ex)) { this.startEmom(ei); return; }
     const warn = this.shortRest(ei, si);
     if (warn && !confirm(warn)) return;
