@@ -2955,7 +2955,9 @@ const Cardio = {
     for (let i = 0; i < 104; i++) { ws = addDays(ws, -7); if (this.weekHit(ws)) n++; else if (!this.isPartial(ws)) break; }
     return n;
   },
-  weekCard(compact) {
+  // cardioOnly (the Cardio tab): aerobic + hard only. Lifting, the streak and
+  // the week picker live on Home, where all three targets are scored together.
+  weekCard(compact, cardioOnly) {
     const ws = weekStart(localDate()), p = this.prefs(ws), s = this.weekStats(ws), st = this.streak();
     if (this.isPartial(ws)) this._warm = true; else this._warm = false;
     const bar = (v, g, color) => `<div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100, Math.round(100 * v / g))}%;background:${color}"></div></div>`;
@@ -2965,20 +2967,21 @@ const Cardio = {
       <div class="text-sm">${this.pace(s.aero, p.aeroGoal, 'min')}</div>
       <div class="goal-row" style="margin-top:10px"><span class="text-dim text-sm">Hard sessions</span><span class="dots">${this.dots(s.hard, p.hardGoal)}</span></div>
       <div class="text-sm">${this.pace(s.hard, p.hardGoal)}</div>
-      <div class="goal-row" style="margin-top:10px"><span class="text-dim text-sm">Lifting sessions</span><span class="dots lift">${this.dots(s.lifts, p.liftGoal)}</span></div>
+      ${cardioOnly ? '' : `<div class="goal-row" style="margin-top:10px"><span class="text-dim text-sm">Lifting sessions</span><span class="dots lift">${this.dots(s.lifts, p.liftGoal)}</span></div>
       <div class="text-sm">${this.pace(s.lifts, p.liftGoal)}</div>
-      ${s.adhoc ? `<div class="text-sm text-dim">Plus ${s.adhoc} ad hoc session${s.adhoc === 1 ? '' : 's'} (not counted)</div>` : ''}
+      ${s.adhoc ? `<div class="text-sm text-dim">Plus ${s.adhoc} ad hoc session${s.adhoc === 1 ? '' : 's'} (not counted)</div>` : ''}`}
       ${compact ? '' : `<div class="text-sm text-dim mt-8">Zone 2 (${p.z2Low}–${p.z2High}): ${s.z2} min · reference only</div>`}
       ${BadNight.restCount(ws) ? `<div class="text-sm text-dim mt-8">Recovery days by choice: ${BadNight.restCount(ws)}</div>` : ''}
-      <div class="text-sm mt-8" style="color:${st ? 'var(--success)' : 'var(--dim)'}">${st ? `${st} week${st === 1 ? '' : 's'} in a row on target` : 'Streak starts the first week you hit all three'}</div>
-      ${this.rollingHtml()}
+      ${cardioOnly ? '' : `<div class="text-sm mt-8" style="color:${st ? 'var(--success)' : 'var(--dim)'}">${st ? `${st} week${st === 1 ? '' : 's'} in a row on target` : 'Streak starts the first week you hit all three'}</div>`}
+      ${this.rollingHtml(cardioOnly)}
+      ${cardioOnly ? '' : `
       <div class="row mt-8" style="justify-content:space-between"><span class="text-sm text-dim">${p.planName ? 'This week: ' + esc(p.planName) : ''}</span>
         <button class="btn btn-outline btn-xs" onclick="event.stopPropagation();Cardio.togglePicker()">${this.pickerOpen ? 'Close' : 'Change this week'}</button></div>
-      ${this.pickerOpen || this.needsComeback() ? this.pickerHtml() : ''}`;
+      ${this.pickerOpen || this.needsComeback() ? this.pickerHtml() : ''}`}`;
   },
   // Rolling window: the last 7 days including today, against the normal weekly
   // targets, with the change from the 7 days before that.
-  rollingHtml() {
+  rollingHtml(cardioOnly) {
     const today = localDate(), from = addDays(today, -6);
     const now = this.weekStats(from), prev = this.weekStats(addDays(from, -7)), p = this.prefsBase();
     const fmt = d => new Date(d + 'T12:00').toLocaleDateString([], { month: 'short', day: 'numeric' });
@@ -2992,7 +2995,7 @@ const Cardio = {
       <div class="text-sm" style="font-weight:700">Past 7 days <span class="text-dim" style="font-weight:400">· ${fmt(from)} – ${fmt(today)}</span></div>
       ${row('Aerobic', now.aero, p.aeroGoal, ' min', delta(now.aero, prev.aero, ' min'))}
       ${row('Hard sessions', now.hard, p.hardGoal, '', delta(now.hard, prev.hard, ''))}
-      ${row('Lifting sessions', now.lifts, p.liftGoal, '', delta(now.lifts, prev.lifts, ''))}
+      ${cardioOnly ? '' : row('Lifting sessions', now.lifts, p.liftGoal, '', delta(now.lifts, prev.lifts, ''))}
     </div>`;
   },
   // ---- Getting going again: choices, not penalties
@@ -3156,13 +3159,12 @@ const Cardio = {
     const daysLeft = 7 - daysSince(ws) - 1;
     let html = `<div class="card">
       <div class="row" style="justify-content:space-between"><div class="card-title" style="margin:0">This week</div><span class="text-dim text-sm">${daysLeft + 1} day${daysLeft ? 's' : ''} left incl. today</span></div>
-      ${this.weekCard(false)}
-      <table class="wk-table"><tr class="text-dim"><td>Week of</td><td>Aerobic</td><td>Hard</td><td>Lifts</td><td></td></tr>`;
+      ${this.weekCard(false, true)}
+      <table class="wk-table"><tr class="text-dim"><td>Week of</td><td>Aerobic</td><td>Hard</td></tr>`;
     for (let i = 1; i <= 6; i++) {
       const w = addDays(ws, -7 * i);
       const st = this.weekStats(w);
-      const hit = this.weekHit(w);
-      html += `<tr><td>${parseLocal(w).toLocaleDateString([], { month: 'short', day: 'numeric' })}</td><td>${st.aero} min</td><td>${st.hard}</td><td>${st.lifts}</td><td>${hit ? '<span style="color:var(--success)">✓</span>' : '<span class="text-dim">–</span>'}</td></tr>`;
+      html += `<tr><td>${parseLocal(w).toLocaleDateString([], { month: 'short', day: 'numeric' })}</td><td>${st.aero} min</td><td>${st.hard}</td></tr>`;
     }
     html += `</table></div>`;
     document.getElementById('cardio-week').innerHTML = html;
