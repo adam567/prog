@@ -1124,7 +1124,7 @@ const Home = {
 // ===================== BODYWEIGHT =====================
 // Current value lives in profile.bodyweight (used for pull-up load and saved
 // with each workout); every weigh-in is logged in profile.bwLog as
-// { date, at, lb } (several a day is fine; a day's value is their mean).
+// { date, at, lb }, one per date (re-entering a day replaces it).
 const Bodyweight = {
   RANGES: [['7d', 7], ['30d', 30], ['60d', 60], ['90d', 90], ['180d', 180], ['1y', 365], ['All', 0], ['Custom', -1]],
   range: 30, from: null, to: null, hover: null,
@@ -1138,12 +1138,10 @@ const Bodyweight = {
     lb = parseLb(lb);
     if (!(lb > 50 && lb < 600)) return false;
     const p = Store.get('profile', {}) || {};
-    const l = (p.bwLog || []).slice();
-    // Re-entering today's weight with the decimal the old input dropped
-    // (244 -> 244.7) corrects that entry instead of averaging the two.
-    const prev = l[l.length - 1];
-    if (prev && prev.date === localDate() && prev.lb === Math.floor(lb) && lb !== prev.lb) l.pop();
-    l.push({ date: localDate(), at: Date.now(), lb });
+    // One weigh-in per date: a second entry today replaces the first.
+    const today = localDate();
+    const l = (p.bwLog || []).filter(e => e.date !== today);
+    l.push({ date: today, at: Date.now(), lb });
     l.sort((x, y) => (x.at || parseLocal(x.date).getTime()) - (y.at || parseLocal(y.date).getTime()));
     p.bwLog = l;
     p.bodyweight = lb;
