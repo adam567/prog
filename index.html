@@ -700,7 +700,8 @@ function syncBandWeight(ex) {
   ex.sets.forEach(s => { if (!s.done) { s.band = ex.band || 'none'; s.goalWeight = w; s.actualWeight = w; } });
 }
 // Weights typed with a comma ("244,7") or a decimal point both work.
-function parseLb(v) { const n = parseFloat(String(v == null ? '' : v).trim().replace(',', '.')); return n > 0 ? Math.round(n * 10) / 10 : 0; }
+// Whitespace is dropped anywhere: phone keyboards auto-space after "." ("243. 3").
+function parseLb(v) { const n = parseFloat(String(v == null ? '' : v).replace(/\s+/g, '').replace(',', '.')); return n > 0 ? Math.round(n * 10) / 10 : 0; }
 const fmtLb = v => (Math.round(v * 10) / 10).toFixed(1);
 // Share of bodyweight your arms/hands actually move on bodyweight exercises.
 // Pushups ~64% at the top of a standard pushup (Ebben et al. 2011, force
@@ -1159,12 +1160,47 @@ const Bodyweight = {
     this.refresh();
   },
   refresh() { if (Nav.current === 'history') History.render(); else Home.render(); },
+  // Bottom sheet with a numeric keypad (not window.prompt, whose text keyboard
+  // auto-spaces after "."). Save shows the exact number it will log, live.
   prompt() {
-    const n = prompt('Bodyweight now (lb), e.g. 244.7', fmtLb(bodyweight()));
-    if (n == null) return;
-    if (!this.set(n)) { alert('Enter a weight in lb.'); return; }
-    this.refresh();
-    toast(`Logged ${fmtLb(bodyweight())} lb`, 'Undo', () => Bodyweight.undo());
+    const last = this.daily().slice(-1)[0], today = localDate();
+    const todayLb = last && last.date === today ? last.lb : null;
+    const prev = [...this.daily()].reverse().find(d => d.date < today);
+    let el = document.getElementById('reps-sheet');
+    if (el) el.remove();
+    el = document.createElement('div');
+    el.id = 'reps-sheet';
+    el.innerHTML = `<div class="panel">
+      <div style="font-weight:700;font-size:1.1rem">Bodyweight now (lb)</div>
+      <div class="text-dim text-sm mt-8">${prev ? `Last: ${fmtLb(prev.lb)} on ${Schedule.fmt(prev.date)}` : ''}${todayLb != null ? `${prev ? ' · ' : ''}today already ${fmtLb(todayLb)}, saving replaces it` : ''}</div>
+      <div class="row gap-8 mt-8"><input type="number" inputmode="decimal" step="0.1" placeholder="e.g. ${fmtLb(bodyweight())}" class="flex-1 other" style="font-size:1.4rem"><button class="btn btn-sm btn-success save" style="width:auto;min-width:110px" disabled>Save</button></div>
+      <div class="text-sm mt-8 warn" style="min-height:1.2em"></div>
+      <button class="btn btn-sm btn-outline mt-8 cancel">Cancel</button>
+    </div>`;
+    const inp = el.querySelector('input'), btn = el.querySelector('.save'), warn = el.querySelector('.warn');
+    const val = () => { const n = parseLb(inp.value); return n > 50 && n < 600 ? n : 0; };
+    const upd = () => {
+      const n = val(), ref = prev ? prev.lb : bodyweight();
+      btn.disabled = !n;
+      btn.textContent = n ? `Save ${fmtLb(n)}` : 'Save';
+      const d = n ? Math.round((n - ref) * 10) / 10 : 0;
+      warn.textContent = n && Math.abs(d) >= 5 ? `That's ${d > 0 ? '+' : ''}${d} lb from ${fmtLb(ref)}. Check the number.` : '';
+      warn.style.color = 'var(--warning)';
+    };
+    const close = () => el.remove();
+    const save = () => {
+      const n = val(); if (!n || !this.set(n)) return;
+      close(); this.refresh();
+      // Undo puts back the entry this one replaced, if today had one.
+      toast(`Logged ${fmtLb(n)} lb`, 'Undo', () => { if (todayLb != null) { this.set(todayLb); this.refresh(); } else this.undo(); });
+    };
+    inp.oninput = upd;
+    inp.onkeydown = e => { if (e.key === 'Enter') save(); };
+    btn.onpointerdown = e => { e.preventDefault(); save(); };
+    el.querySelector('.cancel').onclick = close;
+    el.onclick = e => { if (e.target === el) close(); };
+    document.body.appendChild(el);
+    inp.focus();
   },
   // One value per day (mean of that day's weigh-ins), oldest first.
   daily() {
