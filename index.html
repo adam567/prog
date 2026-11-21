@@ -515,7 +515,7 @@ const BLOCKS = [
         acc: [
           { name: 'DB Fly', reps: '12-15', sets: 2, rir: 3, defaultWeight: 30 },
           { name: 'Pullups', reps: 'max', sets: 2, rir: 2, defaultWeight: 0 },
-          { name: 'DB Row', reps: '10-12', sets: 2, rir: 2, defaultWeight: 55 },
+          { name: 'DB Row', reps: '10-12', sets: 2, rir: 2, defaultWeight: 45 },
           { name: 'Lateral Raise', reps: '12-15', sets: 2, rir: 2, defaultWeight: 10 },
         ]
       },
@@ -563,7 +563,7 @@ const BLOCKS = [
         acc: [
           { name: 'DB Fly', reps: '12-15', sets: 2, rir: 3, defaultWeight: 30 },
           { name: 'Pullups', reps: 'max', sets: 2, rir: 2, defaultWeight: 0 },
-          { name: 'DB Row', reps: '10-12', sets: 2, rir: 2, defaultWeight: 55 },
+          { name: 'DB Row', reps: '10-12', sets: 2, rir: 2, defaultWeight: 45 },
           { name: 'Lateral Raise', reps: '12-15', sets: 2, rir: 2, defaultWeight: 10 },
         ]
       },
@@ -1453,7 +1453,7 @@ const Planner = {
   // (or under the exercise's old name, `was`, after a rename).
   applyPreviousWeights(exercises) {
     const workouts = Store.get('workouts', []);
-    const done = new Set();
+    const done = new Set(), seenAt = {};
     for (let i = workouts.length - 1; i >= 0; i--) {
       (workouts[i].exercises || []).forEach(prevEx => {
         // Pull-ups: start with the band you used last time.
@@ -1484,9 +1484,19 @@ const Planner = {
           if (curEx.isMain || (curEx.name !== prevEx.name && curEx.was !== prevEx.name) || done.has(curEx.name)) return;
           curEx.sets.forEach(s => { s.goalWeight = last.actualWeight; s.actualWeight = last.actualWeight; });
           done.add(curEx.name);
+          seenAt[curEx.name] = workouts[i].startedAt || Date.parse(workouts[i].date) || 0;
         });
       });
     }
+    // A weight change asked for between workouts (profile.nextWeights:
+    // { name: { w, at } }) wins over last time's weight until a newer workout
+    // logs that exercise.
+    const over = (Store.get('profile', {}) || {}).nextWeights || {};
+    exercises.forEach(c => {
+      const o = over[c.name];
+      if (c.isMain || !o || !(o.w > 0) || (seenAt[c.name] || 0) > o.at) return;
+      c.sets.forEach(s => { s.goalWeight = o.w; s.actualWeight = o.w; });
+    });
     // Pull-ups: weight is bodyweight minus band assist, not last time's number.
     exercises.forEach(c => { if (c.name === 'Pullups') syncBandWeight(c); });
     return exercises;
