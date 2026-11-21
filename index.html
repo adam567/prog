@@ -664,6 +664,14 @@ BLOCKS.slice(0, 3).forEach(b => b.days.forEach(d => {
 
 // ===================== HELPERS =====================
 function roundTo5(n) { return Math.round(n / 5) * 5; }
+// A sheet button that acts on pointerdown removes itself before the finger
+// lifts; the browser then delivers that tap's click to whatever is underneath
+// (e.g. the next set's Play button). Eat that one click.
+function swallowGhostClick() {
+  const h = e => { e.stopPropagation(); e.preventDefault(); };
+  document.addEventListener('click', h, { capture: true, once: true });
+  setTimeout(() => document.removeEventListener('click', h, true), 700);
+}
 function liftName(k) { return { squat: 'Squat', bench: 'Bench Press', deadlift: 'Deadlift' }[k]; }
 function fmtTime(secs) {
   const m = Math.floor(secs / 60), s = secs % 60;
@@ -1196,7 +1204,7 @@ const Bodyweight = {
     };
     inp.oninput = upd;
     inp.onkeydown = e => { if (e.key === 'Enter') save(); };
-    btn.onpointerdown = e => { e.preventDefault(); save(); };
+    btn.onpointerdown = e => { e.preventDefault(); swallowGhostClick(); save(); };
     el.querySelector('.cancel').onclick = close;
     el.onclick = e => { if (e.target === el) close(); };
     document.body.appendChild(el);
@@ -2171,7 +2179,7 @@ const Workout = {
       if (!(y > 0)) return;
       s.actualReps = `${y} yd/side`; s.yards = y; s.done = true; finish();
     };
-    el.querySelector('.btn').onpointerdown = e => { e.preventDefault(); other(); };
+    el.querySelector('.btn').onpointerdown = e => { e.preventDefault(); swallowGhostClick(); other(); };
     inp.onkeydown = e => { if (e.key === 'Enter') other(); };
     document.body.appendChild(el);
   },
@@ -2238,7 +2246,7 @@ const Workout = {
     };
     // pointerdown: fires before the keyboard closes and shifts the sheet down,
     // which otherwise makes the first tap on Save miss.
-    el.querySelector('.btn').onpointerdown = e => { e.preventDefault(); save(); };
+    el.querySelector('.btn').onpointerdown = e => { e.preventDefault(); swallowGhostClick(); save(); };
     inp.onkeydown = e => { if (e.key === 'Enter') save(); };
     document.body.appendChild(el);
   },
