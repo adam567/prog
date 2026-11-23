@@ -803,7 +803,7 @@ function totalDays() {
 // exercise is a rest and is scored against the limit; a gap between different
 // exercises is a changeover (strip, re-rack, move the bench) and isn't.
 // Returns null when too few sets were timed to say anything.
-function restStats(exercises, limit) {
+function restStats(exercises, limit, pauses) {
   limit = limit || (Store.get('profile', {}) || {}).nudge || 120;
   const sets = [];
   (exercises || []).forEach((ex, ei) => (ex.sets || []).forEach(s => {
@@ -813,7 +813,10 @@ function restStats(exercises, limit) {
   sets.sort((a, b) => a.start - b.start);
   const rests = [], changes = [];
   for (let i = 1; i < sets.length; i++) {
-    const gap = Math.round((sets[i].start - sets[i - 1].end) / 1000);
+    const a = sets[i - 1].end, b = sets[i].start;
+    // Time spent paused between the two sets isn't rest.
+    const off = (pauses || []).reduce((t, p) => t + Math.max(0, Math.min(b, p.to) - Math.max(a, p.from)), 0);
+    const gap = Math.round((b - a - off) / 1000);
     if (gap <= 0) continue;
     (sets[i].ei === sets[i - 1].ei ? rests : changes).push(gap);
   }
@@ -833,7 +836,7 @@ function restStats(exercises, limit) {
 // timed (so older workouts drop their changeovers too), else as stored.
 function workoutRest(w) {
   const t = w.timer || {};
-  const r = restStats(w.exercises, t.limit);
+  const r = restStats(w.exercises, t.limit, w.pauses);
   return r ? { ...t, ...r } : (t.restPeriods ? t : null);
 }
 
@@ -932,7 +935,7 @@ const Timer = {
     const out = { totalWork, totalRest, avgRest, maxRest, restPeriods: rest.length, workPeriods: work.length, restOver, onTimePct, limit: Store.get('profile', {}).nudge || 120 };
     // Prefer rests measured from the sets themselves: they know which exercise
     // each set belongs to, so changeovers between exercises aren't scored.
-    const bySets = typeof Workout !== 'undefined' && Workout.data ? restStats(Workout.data.exercises, out.limit) : null;
+    const bySets = typeof Workout !== 'undefined' && Workout.data ? restStats(Workout.data.exercises, out.limit, Workout.data.pauses) : null;
     return bySets ? { ...out, ...bySets } : out;
   },
 
@@ -1312,8 +1315,8 @@ const Bodyweight = {
     const custom = this.range === -1 ? `<div class="row gap-8 mt-8" style="align-items:center"><input type="date" id="bw-from" value="${w.from}" onchange="Bodyweight.setCustom()" style="flex:1;min-width:0;width:100%;padding:6px;font-size:.85rem"><span class="text-dim">to</span><input type="date" id="bw-to" value="${w.to}" onchange="Bodyweight.setCustom()" style="flex:1;min-width:0;width:100%;padding:6px;font-size:.85rem"></div>` : '';
     const inWin = days.filter(d => d.date >= w.from && d.date <= w.to);
     const change = inWin.length >= 2 ? Math.round((inWin[inWin.length - 1].lb - inWin[0].lb) * 10) / 10 : null;
-    return `<div class="card"><div class="row" style="align-items:center"><div class="card-title flex-1" style="margin:0">Bodyweight</div><span style="font-weight:700;margin-right:8px">${fmtLb(bodyweight())} lb</span><button class="btn-xs btn-outline" onclick="Bodyweight.prompt()">Update</button></div>
-      <div class="text-sm text-dim">${[avg ? this.avgLabel(avg) : '', t, this.lastLabel()].filter(Boolean).join(' · ') || 'Log your weight to start a trend'}</div>
+    return `<div class="card"><div class="row" style="align-items:center"><div class="card-title flex-1" style="margin:0">Bodyweight</div><span style="margin-right:8px;text-align:right;line-height:1.1"><span style="font-weight:700">${fmtLb(avg ? avg.lb : bodyweight())} lb</span><br><span class="text-sm text-dim">${avg && avg.full ? '7-day avg' : avg ? `${avg.n}-day avg` : ''}</span></span><button class="btn-xs btn-outline" onclick="Bodyweight.prompt()">Update</button></div>
+      <div class="text-sm text-dim">${[`last ${fmtLb(days[days.length - 1].lb)} lb (${this.lastLabel().replace('last weighed ', '')})`, t].filter(Boolean).join(' · ')}</div>
       <div class="row gap-8 mt-8" style="flex-wrap:wrap">${chips}</div>${custom}
       <div id="bw-chart">${this.chart()}</div>
       ${change != null ? `<div class="text-sm mt-8">In this range: ${change > 0 ? '+' : ''}${change.toFixed(1)} lb over ${inWin.length} weigh-in days</div>` : ''}
@@ -1793,7 +1796,8 @@ const Guard = {
     const d = Workout.data;
     if (!d) { this.hide(); return; }
     if (Workout.activeSet || Workout.emom) return; // mid-set: clearly still going
-    const idle = this.idleMs(d), total = Date.now() - d.startTime;
+    if (d.pausedAt) { this.hide(); return; } // paused on purpose
+    const idle = this.idleMs(d), total = Date.now() - d.startTime - (d.pausedMs || 0);
     const lastAt = new Date(d.lastActivity || d.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     if (total > this.CAP_MIN * 60000) return this.autoEnd(`Open for over 4 hours, so it was ended at your last activity (${lastAt}).`);
     if (onOpen && idle > (this.IDLE_MIN + this.GRACE_MIN) * 60000) return this.autoEnd(`No activity since ${lastAt}, so it was ended then.`);
@@ -2032,9 +2036,10 @@ const Workout = {
 
     // Finish button
     const allMainDone = d.exercises.filter(e => e.isMain).every(e => e.sets.filter(s => !s.isWarmup && !s.isExtra && !s.isBackoff).every(s => s.done) || e.skipped);
-    html += `<button class="btn ${allMainDone ? 'btn-success' : 'btn-outline'}" onclick="Workout.finish()" style="margin-bottom:24px">
+    html += `<button class="btn ${allMainDone ? 'btn-success' : 'btn-outline'}" onclick="Workout.finish()" style="margin-bottom:8px">
       ${allMainDone ? 'Finish Workout' : 'Finish Early'}
-    </button></div>`;
+    </button>
+    <button class="btn btn-outline btn-sm" onclick="Workout.pause()" style="margin-bottom:24px">⏸ Pause Workout</button></div>`;
 
     document.getElementById('workout-content').innerHTML = html;
     this.updateClock();
@@ -2046,7 +2051,7 @@ const Workout = {
     const el = document.getElementById('wo-clock');
     if (!el || !this.data) return;
     const d = this.data, S = Planner.secs(), f = Planner.factor();
-    const elapsed = Math.round((Date.now() - d.startTime) / 60000);
+    const elapsed = Math.round((Date.now() - d.startTime - (d.pausedMs || 0)) / 60000);
     let rem = 0;
     d.exercises.forEach(ex => { if (!ex.skipped) ex.sets.forEach(s => { if (!s.done) rem += s.isWarmup ? S.warm : ex.isMain ? S.main : S.acc; }); });
     if (d.adhoc) { el.innerHTML = `${elapsed} min in`; return; }
@@ -2055,6 +2060,63 @@ const Workout = {
     if (!d.minutes) { el.innerHTML = `${elapsed} min in · ~${remMin} min left · done ~${at}`; return; }
     const over = elapsed + remMin - d.minutes;
     el.innerHTML = `${elapsed} of ${d.minutes} min · done ~${at}` + (over > 3 ? ` · <span style="color:var(--warning)">~${over} min over</span>` : '');
+  },
+
+  // Pause the whole workout: the clock, rest timer and "still working out?"
+  // guard all stop until Resume. Paused time is left out of the duration and
+  // of rest stats. A set being timed or an EMOM has to end first.
+  pause() {
+    const d = this.data;
+    if (!d || d.pausedAt) return;
+    if (this.emom) { toast('End the EMOM before pausing.'); return; }
+    if (this.activeSet) {
+      if (this.activeSet.startTime) { toast('Finish the set before pausing.'); return; }
+      this.cancelSet();
+    }
+    Timer.stop();
+    d.pausedAt = Date.now();
+    this.save();
+    this.showPaused();
+  },
+  resume() {
+    const d = this.data;
+    if (!d || !d.pausedAt) { this.hidePaused(); return; }
+    const now = Date.now();
+    d.pauses = [...(d.pauses || []), { from: d.pausedAt, to: now }];
+    d.pausedMs = (d.pausedMs || 0) + (now - d.pausedAt);
+    delete d.pausedAt;
+    this.save();
+    this.hidePaused();
+    Timer.show();
+    Timer.start('resting');
+    this.render();
+  },
+  showPaused() {
+    let el = document.getElementById('pause-screen');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'pause-screen';
+      el.style.cssText = 'position:fixed;inset:0;z-index:450;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 16px;text-align:center';
+      document.body.appendChild(el);
+    }
+    const paint = () => {
+      const d = this.data;
+      if (!d || !d.pausedAt) return;
+      const at = new Date(d.pausedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      const mins = Math.floor((Date.now() - d.pausedAt) / 60000);
+      el.innerHTML = `<div style="font-size:3rem;line-height:1">⏸</div>
+        <div style="font-weight:700;font-size:1.4rem;margin-top:12px">Workout paused</div>
+        <div class="text-dim mt-8">${esc(d.dayName || '')}<br>Paused at ${at} · ${mins < 1 ? 'just now' : `${mins} min`}</div>
+        <button class="btn btn-success mt-16" style="max-width:320px" onclick="Workout.resume()">▶ Resume</button>
+        <button class="btn btn-outline btn-sm mt-8" style="max-width:320px" onclick="if(confirm('Finish this workout now?')){Workout.hidePaused();Workout.finish()}">Finish workout</button>`;
+    };
+    paint();
+    clearInterval(this.pauseTick);
+    this.pauseTick = setInterval(paint, 30000);
+  },
+  hidePaused() {
+    clearInterval(this.pauseTick);
+    const el = document.getElementById('pause-screen'); if (el) el.remove();
   },
 
   // Every change goes through here so the forgotten-workout guard knows you're active.
@@ -2701,8 +2763,11 @@ const Workout = {
     clearInterval(this.emomTick);
     this.emom = null;
     const bar = document.getElementById('set-bar'); if (bar) bar.remove();
-    const endAt = opts.endAt ? Math.min(opts.endAt, Date.now()) : Date.now();
-    const duration = Math.max(1, Math.round((endAt - d.startTime) / 60000));
+    let endAt = opts.endAt ? Math.min(opts.endAt, Date.now()) : Date.now();
+    // Finishing while paused: the workout ended when the pause began.
+    if (d.pausedAt) { endAt = Math.min(endAt, d.pausedAt); delete d.pausedAt; }
+    this.hidePaused();
+    const duration = Math.max(1, Math.round((endAt - d.startTime - (d.pausedMs || 0)) / 60000));
 
     // Capture timer stats before stopping
     const timerSummary = Timer.getSummary();
@@ -2713,6 +2778,7 @@ const Workout = {
       startedAt: d.startTime,
       endedAt: endAt,
       autoEnded: opts.auto || null,
+      ...(d.pauses && d.pauses.length ? { pauses: d.pauses, pausedMin: Math.round((d.pausedMs || 0) / 60000) } : {}),
       dayNum: d.dayNum,
       block: d.block,
       absWeek: d.absWeek,
@@ -4247,9 +4313,12 @@ const App = {
     const active = Store.get('activeWorkout', null);
     if (active) {
       Workout.data = active;
-      Timer.show();
-      Timer.start('resting');
-      Workout.restoreActive();
+      if (active.pausedAt) Workout.showPaused();
+      else {
+        Timer.show();
+        Timer.start('resting');
+        Workout.restoreActive();
+      }
       Nav.current = 'workout';
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.getElementById('page-workout').classList.add('active');
