@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>PH3 Clicker Lab</title>
+<style>
+:root{--bg:#0f0f1a;--surface:#1a1a2e;--surface2:#232342;--surface3:#2d2d52;--primary:#4361ee;--accent:#f72585;--success:#06d6a0;--warning:#ffd166;--danger:#ef476f;--text:#e8e8f0;--dim:#7777a0;--radius:12px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);padding:16px;padding-bottom:40px;-webkit-tap-highlight-color:transparent}
+h1{font-size:1.1rem;margin-bottom:2px}
+.sub{color:var(--dim);font-size:.8rem;margin-bottom:12px}
+h2{font-size:.75rem;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+.card{background:var(--surface);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+#sim{text-align:center;border:3px solid var(--surface3);transition:background .15s}
+#sim.countdown{background:var(--warning);color:#000;border-color:var(--warning)}
+#sim.working{background:var(--danger);border-color:var(--danger)}
+#sim.done{border-color:var(--success)}
+#sim .big{font-size:3rem;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.1}
+#sim .msg{font-size:.95rem;margin-top:4px}
+#sim.flash{outline:4px solid var(--primary);outline-offset:3px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{flex:1;min-width:120px;padding:10px 12px;border-radius:10px;border:2px solid var(--surface3);background:var(--surface2);color:var(--text);font-size:.9rem;font-weight:600}
+.btn.on{border-color:var(--success);color:var(--success)}
+label{font-size:.85rem;color:var(--dim);display:flex;align-items:center;gap:6px}
+select{background:var(--surface2);color:var(--text);border:2px solid var(--surface3);border-radius:8px;padding:6px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.stats b{display:block;font-size:1.4rem}
+.stats span{font-size:.7rem;color:var(--dim)}
+#keys{font-size:.85rem}
+#keys div{padding:4px 0;border-bottom:1px solid var(--surface3)}
+#log{font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;max-height:45vh;overflow:auto;white-space:pre-wrap;word-break:break-all}
+#log .ign{color:var(--dim)}
+#log .trig{color:var(--success)}
+#log .media{color:var(--warning)}
+#focuswarn{display:none;background:var(--danger);color:#fff;padding:8px;border-radius:8px;margin-bottom:12px;font-size:.85rem}
+</style>
+</head>
+<body>
+<h1>Clicker Lab</h1>
+<div class="sub">A test page only. It reads and writes no workout data. Press the clicker and see what arrives.</div>
+<div id="focuswarn">The page doesn't have focus, so key presses won't reach it. Tap anywhere on the page.</div>
+
+<div class="card" id="sim">
+  <div class="big" id="simBig">Ready</div>
+  <div class="msg" id="simMsg">Clicker press = tap the bar. Press to start a fake set.</div>
+</div>
+
+<div class="card">
+  <div class="stats">
+    <div><b id="nRaw">0</b><span>raw key events</span></div>
+    <div><b id="nPress">0</b><span>counted presses</span></div>
+    <div><b id="nDup">0</b><span>merged duplicates</span></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Settings</h2>
+  <div class="row" style="margin-bottom:10px">
+    <label>Countdown <select id="cd"><option value="3">3 s</option><option value="8" selected>8 s (app)</option></select></label>
+    <label>Merge window <select id="win"><option value="0">off</option><option value="250">250 ms</option><option value="500" selected>500 ms</option><option value="1000">1 s</option></select></label>
+  </div>
+  <div class="row">
+    <button class="btn" id="mediaBtn">Arm media keys</button>
+    <button class="btn" id="clearBtn">Clear log</button>
+  </div>
+  <div class="sub" style="margin:8px 0 0">"Arm media keys" plays silent audio so play/pause/next buttons come to this page. Try the clicker before and after arming it.</div>
+</div>
+
+<div class="card">
+  <h2>Keys seen (each button you press)</h2>
+  <div id="keys"><div class="sub" style="margin:0">Nothing yet.</div></div>
+</div>
+
+<div class="card">
+  <h2>Event log (newest first)</h2>
+  <div id="log"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const t0 = performance.now();
+let raw = 0, presses = 0, dups = 0, lastPressAt = -1e9, lastEvtAt = null;
+const seen = {}; // signature -> count
+
+function log(text, cls) {
+  const ms = (performance.now() - t0) / 1000;
+  const d = document.createElement('div');
+  if (cls) d.className = cls;
+  d.textContent = `${ms.toFixed(2).padStart(7)}s  ${text}`;
+  $('log').prepend(d);
+  while ($('log').childNodes.length > 300) $('log').lastChild.remove();
+}
+
+function showSeen() {
+  $('keys').innerHTML = Object.entries(seen).map(([k, n]) => `<div>${k} <span style="color:var(--dim)">× ${n}</span></div>`).join('');
+}
+
+// One physical press often sends several events (e.g. Volume Up + Enter, or a key repeat).
+// Everything inside the merge window counts as one press.
+function press(source) {
+  const now = performance.now(), win = +$('win').value;
+  if (now - lastPressAt < win) { dups++; $('nDup').textContent = dups; log(`   ↳ merged into previous press (${Math.round(now - lastPressAt)} ms later)`, 'ign'); return; }
+  lastPressAt = now;
+  presses++; $('nPress').textContent = presses;
+  log(`   ➜ PRESS #${presses} from ${source}`, 'trig');
+  $('sim').classList.add('flash'); setTimeout(() => $('sim').classList.remove('flash'), 150);
+  Sim.tap();
+}
+
+const MODIFIERS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Unidentified']);
+function onKey(e) {
+  raw++; $('nRaw').textContent = raw;
+  const now = performance.now(), gap = lastEvtAt == null ? '' : `  +${Math.round(now - lastEvtAt)}ms`;
+  lastEvtAt = now;
+  log(`${e.type.padEnd(7)} key=${JSON.stringify(e.key)} code=${JSON.stringify(e.code)} keyCode=${e.keyCode}${e.repeat ? ' repeat' : ''}${gap}`, e.type === 'keyup' ? 'ign' : '');
+  if (e.type !== 'keydown') return;
+  // Stop Enter/Space from also "clicking" whatever button has focus, and keep volume
+  // keys from changing the volume where the browser allows that.
+  e.preventDefault();
+  const sig = `key "${e.key}" / code "${e.code}" / keyCode ${e.keyCode}`;
+  seen[sig] = (seen[sig] || 0) + 1; showSeen();
+  if (e.repeat || MODIFIERS.has(e.key)) return;
+  press(e.key || e.code || 'keyCode ' + e.keyCode);
+}
+window.addEventListener('keydown', onKey, true);
+window.addEventListener('keyup', onKey, true);
+
+// ---- Media session: a clicker that sends play/pause/next only reaches a page that is playing audio.
+let audio = null;
+function silentWavUrl() {
+  const n = 8000, buf = new ArrayBuffer(44 + n), v = new DataView(buf);
+  const s = (o, str) => [...str].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  s(0, 'RIFF'); v.setUint32(4, 36 + n, true); s(8, 'WAVE'); s(12, 'fmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, 8000, true); v.setUint32(28, 8000, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true);
+  s(36, 'data'); v.setUint32(40, n, true);
+  for (let i = 0; i < n; i++) v.setUint8(44 + i, 128);
+  return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+}
+$('mediaBtn').onclick = async () => {
+  if (audio) { audio.pause(); audio = null; $('mediaBtn').classList.remove('on'); $('mediaBtn').textContent = 'Arm media keys'; log('media keys disarmed', 'media'); return; }
+  audio = new Audio(silentWavUrl());
+  audio.loop = true;
+  try { await audio.play(); } catch (err) { log('audio play failed: ' + err.message, 'media'); audio = null; return; }
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.metadata = new MediaMetadata({ title: 'PH3 Clicker Lab' });
+    for (const act of ['play', 'pause', 'stop', 'nexttrack', 'previoustrack', 'seekforward', 'seekbackward']) {
+      try {
+        navigator.mediaSession.setActionHandler(act, () => {
+          raw++; $('nRaw').textContent = raw;
+          log(`media   action=${act}`, 'media');
+          const sig = `media "${act}"`; seen[sig] = (seen[sig] || 0) + 1; showSeen();
+          if (audio && audio.paused) audio.play().catch(() => {}); // keep the session alive
+          press('media ' + act);
+        });
+      } catch { log(`(media action ${act} not supported here)`, 'ign'); }
+    }
+  } else log('this browser has no Media Session API', 'media');
+  $('mediaBtn').classList.add('on'); $('mediaBtn').textContent = 'Media keys armed';
+  log('media keys armed (silent audio playing)', 'media');
+};
+$('clearBtn').onclick = () => { $('log').innerHTML = ''; raw = presses = dups = 0; for (const k in seen) delete seen[k]; ['nRaw', 'nPress', 'nDup'].forEach(i => $(i).textContent = 0); $('keys').innerHTML = ''; Sim.reset(); };
+
+// Focus matters: a key press only reaches the page while it has focus.
+function focusCheck() { $('focuswarn').style.display = document.hasFocus() ? 'none' : 'block'; }
+window.addEventListener('focus', () => { focusCheck(); log('page got focus', 'ign'); });
+window.addEventListener('blur', () => { focusCheck(); log('page lost focus', 'ign'); });
+document.addEventListener('visibilitychange', () => log('visibility: ' + document.visibilityState, 'ign'));
+setInterval(focusCheck, 1000);
+
+// ---- Fake set: the same three states as the app's bar (countdown → working → stopped).
+const Sim = {
+  state: 'idle', tapAt: 0, startAt: 0, timer: null,
+  tap() {
+    if (this.state === 'idle' || this.state === 'done') this.start();
+    else if (this.state === 'countdown') { this.reset(); $('simMsg').textContent = 'Countdown cancelled. Press to start again.'; }
+    else this.stop();
+  },
+  start() {
+    this.state = 'countdown'; this.tapAt = Date.now();
+    clearInterval(this.timer); this.timer = setInterval(() => this.paint(), 100); this.paint();
+  },
+  stop() {
+    const tut = Math.round((Date.now() - this.startAt) / 1000);
+    clearInterval(this.timer); this.state = 'done';
+    $('sim').className = 'card done'; $('simBig').textContent = tut + 's';
+    $('simMsg').textContent = 'Fake set stopped. Press to start another.';
+    try { navigator.vibrate(60); } catch {}
+  },
+  reset() { clearInterval(this.timer); this.state = 'idle'; $('sim').className = 'card'; $('simBig').textContent = 'Ready'; $('simMsg').textContent = 'Press to start a fake set.'; },
+  paint() {
+    const cd = +$('cd').value * 1000;
+    if (this.state === 'countdown') {
+      const left = this.tapAt + cd - Date.now();
+      if (left <= 0) { this.state = 'working'; this.startAt = this.tapAt + cd; try { navigator.vibrate(100); } catch {} }
+      else { $('sim').className = 'card countdown'; $('simBig').textContent = Math.ceil(left / 1000); $('simMsg').textContent = 'Starts soon · press to cancel'; return; }
+    }
+    if (this.state === 'working') {
+      $('sim').className = 'card working'; $('simBig').textContent = Math.floor((Date.now() - this.startAt) / 1000) + 's';
+      $('simMsg').textContent = '■ Working · press to stop';
+    }
+  },
+};
+// A tap on the card works too, so the page can be compared with the clicker.
+$('sim').onclick = () => press('screen tap');
+log('ready. ' + navigator.userAgent, 'ign');
+</script>
+</body>
+</html>

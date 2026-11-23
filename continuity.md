@@ -12,7 +12,7 @@ Deployed at **adam567.github.io/prog** via GitHub Pages from the **adam567/prog*
 - Secrets: `PH3_KEY` (1Password "PH3 sync key"); `STRAVA_CLIENT_ID` / `STRAVA_CLIENT_SECRET` once the Strava API app exists. App settings only.
 
 ## Deploy Process
-Zip exactly: app.py, index.html, manifest.json, sw.js, robots.txt, startup.sh. Then (PowerShell):
+Zip exactly: app.py, index.html, clicker.html, manifest.json, sw.js, robots.txt, startup.sh. Then (PowerShell):
 ```
 $env:AZURE_CONFIG_DIR='C:\wine\.azure-personal'; az account show   # must be PH3 / personal account
 az webapp deploy -n ph3 -g ph3-rg --type zip --src-path <zip>
