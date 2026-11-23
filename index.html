@@ -672,6 +672,46 @@ function swallowGhostClick() {
   document.addEventListener('click', h, { capture: true, once: true });
   setTimeout(() => document.removeEventListener('click', h, true), 700);
 }
+// In-app bottom sheets in place of the browser's confirm()/prompt().
+// Both return Promises; tapping outside the panel counts as Cancel.
+const Ask = {
+  open(inner, wire) {
+    return new Promise(resolve => {
+      let el = document.getElementById('reps-sheet');
+      if (el) el.remove();
+      el = document.createElement('div');
+      el.id = 'reps-sheet';
+      el.innerHTML = `<div class="panel">${inner}</div>`;
+      const close = v => { el.remove(); resolve(v); };
+      const tap = (sel, fn) => { const b = el.querySelector(sel); if (b) b.onpointerdown = e => { e.preventDefault(); swallowGhostClick(); fn(); }; };
+      el.onclick = e => { if (e.target === el) close(null); };
+      document.body.appendChild(el);
+      wire(el, close, tap);
+    });
+  },
+  head(title, body) {
+    return `<div style="font-weight:700;font-size:1.1rem">${esc(title)}</div>${body ? `<div class="text-dim text-sm mt-8" style="white-space:pre-line">${esc(body)}</div>` : ''}`;
+  },
+  // Resolves true for OK, false otherwise. danger = red OK button.
+  confirm(title, body, { ok = 'OK', cancel = 'Cancel', danger = false } = {}) {
+    return this.open(`${this.head(title, body)}
+      <button class="btn ${danger ? 'btn-danger' : 'btn-success'} mt-16 ok">${esc(ok)}</button>
+      <button class="btn btn-sm btn-outline mt-8 no">${esc(cancel)}</button>`,
+      (el, close, tap) => { tap('.ok', () => close(true)); tap('.no', () => close(false)); }).then(v => v === true);
+  },
+  // Resolves the typed text, or null on Cancel.
+  text(title, body, { value = '', placeholder = '', numeric = false, ok = 'Save' } = {}) {
+    return this.open(`${this.head(title, body)}
+      <div class="row gap-8 mt-8"><input ${numeric ? 'type="number" inputmode="numeric"' : 'type="text"'} class="flex-1" style="font-size:1.2rem" placeholder="${esc(placeholder)}" value="${esc(value)}"><button class="btn btn-sm btn-success ok" style="width:auto;min-width:90px">${esc(ok)}</button></div>
+      <button class="btn btn-sm btn-outline mt-8 no">Cancel</button>`,
+      (el, close, tap) => {
+        const inp = el.querySelector('input');
+        tap('.ok', () => close(inp.value)); tap('.no', () => close(null));
+        inp.onkeydown = e => { if (e.key === 'Enter') close(inp.value); };
+        inp.focus();
+      }).then(v => v == null ? null : v);
+  },
+};
 function liftName(k) { return { squat: 'Squat', bench: 'Bench Press', deadlift: 'Deadlift' }[k]; }
 function fmtTime(secs) {
   const m = Math.floor(secs / 60), s = secs % 60;
@@ -1339,7 +1379,7 @@ const Pushups = {
     Home.render();
     toast(`+${n} pushups`, 'Undo', () => Pushups.undo());
   },
-  other() { const n = prompt('How many pushups?'); if (n != null) this.add(n); },
+  async other() { const n = await Ask.text('How many pushups?', '', { placeholder: 'e.g. 20', numeric: true, ok: 'Add' }); if (n != null && n.trim()) this.add(n); },
   undo() {
     const l = this.list();
     if (!l.length) return;
@@ -2108,11 +2148,16 @@ const Workout = {
         <div style="font-weight:700;font-size:1.4rem;margin-top:12px">Workout paused</div>
         <div class="text-dim mt-8">${esc(d.dayName || '')}<br>Paused at ${at} · ${mins < 1 ? 'just now' : `${mins} min`}</div>
         <button class="btn btn-success mt-16" style="max-width:320px" onclick="Workout.resume()">▶ Resume</button>
-        <button class="btn btn-outline btn-sm mt-8" style="max-width:320px" onclick="if(confirm('Finish this workout now?')){Workout.hidePaused();Workout.finish()}">Finish workout</button>`;
+        <button class="btn btn-outline btn-sm mt-8" style="max-width:320px" onclick="Workout.finishFromPause()">Finish workout</button>`;
     };
     paint();
     clearInterval(this.pauseTick);
     this.pauseTick = setInterval(paint, 30000);
+  },
+  async finishFromPause() {
+    if (!(await Ask.confirm('Finish this workout now?', 'It ends at the time you paused.', { ok: 'Finish workout', cancel: 'Stay paused' }))) return;
+    this.hidePaused();
+    this.finish();
   },
   hidePaused() {
     clearInterval(this.pauseTick);
@@ -2338,25 +2383,25 @@ const Workout = {
   setName(ei, si) { return `${this.data.exercises[ei].name} ${this.label(ei, si)}`; },
 
   // Before starting or logging a different set: never silently drop a running one.
-  release(ei, si) {
+  async release(ei, si) {
     const a = this.activeSet;
     if (this.emom && this.emom.ei !== ei) {
-      if (!confirm(`The EMOM for ${this.data.exercises[this.emom.ei].name} is still running.\n\nOK = end it and go on.\nCancel = keep it running.`)) return false;
+      if (!(await Ask.confirm(`The EMOM for ${this.data.exercises[this.emom.ei].name} is still running.`, '', { ok: 'End it and go on', cancel: 'Keep it running' }))) return false;
       this.endEmom();
     }
     if (!a || (a.ei === ei && a.si === si)) return true;
     if (!a.startTime) { this.clearActiveTimers(); this.activeSet = null; return true; } // countdown on the wrong row: just move it
     const secs = Math.round((Date.now() - a.startTime) / 1000);
-    if (!confirm(`${this.setName(a.ei, a.si)} is still running (${fmtTime(secs)}).\n\nOK = stop and save it, then go on to ${this.setName(ei, si)}.\nCancel = keep it running.`)) return false;
-    this.stopSet(a.ei, a.si);
+    if (!(await Ask.confirm(`${this.setName(a.ei, a.si)} is still running (${fmtTime(secs)})`, `Stop and save it, then go on to ${this.setName(ei, si)}?`, { ok: 'Stop it and go on', cancel: 'Keep it running' }))) return false;
+    await this.stopSet(a.ei, a.si);
     return true;
   },
 
-  startSet(ei, si) {
+  async startSet(ei, si) {
     const ex = this.data.exercises[ei];
     if (this.emom && this.emom.ei === ei) { this.emomTap(); return; }
     if (this.isActive(ei, si)) { this.tapActive(); return; }
-    if (!this.release(ei, si)) return;
+    if (!(await this.release(ei, si))) return;
     // First Play of the workout: remind to start the Strava recording (HR).
     if (!this.data.stravaReminded) {
       this.data.stravaReminded = true;
@@ -2432,17 +2477,19 @@ const Workout = {
     this.stopSet(a.ei, a.si);
   },
 
-  stopSet(ei, si) {
+  async stopSet(ei, si) {
     const a = this.activeSet;
     const s = this.data.exercises[ei].sets[si];
     if (a && a.startTime) {
       const now = Date.now(), tut = Math.round((now - a.startTime) / 1000);
       const reps = parseInt(s.actualReps) || 0;
       // A few seconds for a multi-rep set almost always means "did the set, then remembered ▶".
-      if (tut < 5 && reps >= 3 && confirm(`That was only ${tut}s for ${reps} reps.\n\nDid you do the set before tapping ▶?\nOK = log it as ending when you tapped ▶, with an estimated time.\nCancel = keep ${tut}s.`)) {
-        this.clearActiveTimers();
-        this.activeSet = null;
-        return this.backfillSet(ei, si, a.tapAt);
+      if (tut < 5 && reps >= 3) {
+        this.clearActiveTimers(); // freeze the set clock while asking
+        if (await Ask.confirm(`That was only ${tut}s for ${reps} reps`, `Did you do the set before tapping ▶? It can be logged as ending when you tapped ▶, with an estimated time.`, { ok: 'Yes, log it that way', cancel: `No, keep ${tut}s` })) {
+          this.activeSet = null;
+          return this.backfillSet(ei, si, a.tapAt);
+        }
       }
       s.tut = tut;
       if (this.data.exercises[ei].inputType === 'timed') s.actualReps = fmtTime(tut);
@@ -2460,9 +2507,9 @@ const Workout = {
     this.askReps(ei, si);
   },
 
-  undoSet(ei, si) {
+  async undoSet(ei, si) {
     const s = this.data.exercises[ei].sets[si];
-    if (!confirm(`Undo ${this.setName(ei, si)}?\n\nIt goes back to not done${s.tut ? ` and its ${s.tut}s time is cleared` : ''}.`)) return;
+    if (!(await Ask.confirm(`Undo ${this.setName(ei, si)}?`, `It goes back to not done${s.tut ? ` and its ${s.tut}s time is cleared` : ''}.`, { ok: 'Undo set', cancel: 'Keep it' }))) return;
     s.done = false;
     s.tut = 0;
     delete s.startedAt; delete s.endedAt; delete s.estimated;
@@ -2471,10 +2518,10 @@ const Workout = {
   },
 
   // Effort and a short note on a finished set: "10 barely" -> RPE 10, note "barely".
-  noteSet(ei, si) {
+  async noteSet(ei, si) {
     const s = this.data.exercises[ei].sets[si];
     const cur = [s.rpe, s.note].filter(x => x != null && x !== '').join(' ');
-    const v = prompt(`${this.setName(ei, si)}: effort (RPE 5-10) and/or a note.\nExample: 10 barely got the last rep`, cur);
+    const v = await Ask.text(this.setName(ei, si), 'Effort (RPE 5-10) and/or a note.', { value: cur, placeholder: 'e.g. 10 barely got the last rep' });
     if (v === null) return;
     const m = v.trim().match(/^(?:rpe\s*|@)?(\d+(?:\.5)?)(?![\d.])\s*[,;:-]?\s*(.*)$/i);
     if (m && +m[1] >= 5 && +m[1] <= 10) { s.rpe = +m[1]; s.note = m[2].trim(); }
@@ -2639,8 +2686,8 @@ const Workout = {
   },
 
   // "done": log a set you did without timing it, ending now (or at endAt).
-  backfillSet(ei, si, endAt) {
-    if (!this.release(ei, si)) return;
+  async backfillSet(ei, si, endAt) {
+    if (!(await this.release(ei, si))) return;
     const ex = this.data.exercises[ei];
     const s = ex.sets[si];
     const reps = parseInt(s.actualReps) || 0;
@@ -2752,8 +2799,8 @@ const Workout = {
     this.render();
   },
 
-  confirmExit() {
-    if (confirm('Exit workout? Your progress on completed sets is saved.')) {
+  async confirmExit() {
+    if (await Ask.confirm('Exit workout?', 'Your progress on completed sets is saved.', { ok: 'Exit workout', cancel: 'Keep going' })) {
       this.saveAndExit(false);
     }
   },
@@ -3250,7 +3297,7 @@ const Cardio = {
       const n = parseFloat(document.getElementById(el).value);
       v[f] = isNaN(n) ? 0 : n;
     }
-    if (!v.duration && !v.distance && !v.notes) { alert('Enter at least a duration, distance, or note.'); return; }
+    if (!v.duration && !v.distance && !v.notes) { toast('Enter at least a duration, distance, or note.'); return; }
     const cardio = Store.get('cardio', []);
     if (this.editing) {
       const c = cardio.find(x => x.id === this.editing);
@@ -3262,10 +3309,10 @@ const Cardio = {
     this.resetForm();
     this.render();
   },
-  remove(id) {
+  async remove(id) {
     const cardio = Store.get('cardio', []);
     const c = cardio.find(x => x.id === id);
-    if (!c || !confirm('Delete this session?')) return;
+    if (!c || !(await Ask.confirm('Delete this session?', '', { ok: 'Delete', danger: true }))) return;
     // Strava entries keep a tombstone so the next Strava pull doesn't bring them back.
     const next = c.source === 'strava' ? cardio.map(x => x.id === id ? { id, source: 'strava', deleted: true, date: x.date } : x) : cardio.filter(x => x.id !== id);
     this.sortAndSave(next);
@@ -3773,11 +3820,11 @@ const Strava = {
     try {
       const r = await Sync.api('POST', '/api/strava/start', {});
       const j = await r.json();
-      if (j.url) location.href = j.url; else alert(j.error || 'Could not start Strava connection.');
-    } catch (e) { alert(e.message); }
+      if (j.url) location.href = j.url; else toast(esc(j.error || 'Could not start Strava connection.'));
+    } catch (e) { toast(esc(e.message)); }
   },
   async disconnect() {
-    if (!confirm('Disconnect Strava? Imported sessions stay.')) return;
+    if (!(await Ask.confirm('Disconnect Strava?', 'Imported sessions stay.', { ok: 'Disconnect', danger: true }))) return;
     try { await Sync.api('POST', '/api/strava/disconnect', {}); } catch {}
     await this.refreshStatus(); Settings.renderStrava(); this.renderCard();
   },
@@ -4026,24 +4073,24 @@ const Settings = {
       black: parseInt(document.getElementById('set-band-black').value) || BAND_DEFAULTS.black,
     };
     Store.set('profile', profile);
-    alert('Maxes updated!');
+    toast('Maxes updated');
   },
 
   saveNudge() {
     const profile = Store.get('profile', {}) || {};
     profile.nudge = parseInt(document.getElementById('set-nudge').value) || 120;
     Store.set('profile', profile);
-    alert('Timer updated!');
+    toast('Timer updated');
   },
 
   saveCardio() {
     const profile = Store.get('profile', {}) || {};
     const n = id => parseInt(document.getElementById(id).value) || 0;
     const c = { maxHr: n('set-maxhr') || 185, z2Low: n('set-z2low') || 111, z2High: n('set-z2high') || 130, aeroGoal: n('set-aerogoal') || 150, hardGoal: n('set-hardgoal') || 2, liftGoal: n('set-liftgoal') || 4 };
-    if (c.z2Low >= c.z2High) { alert('Aerobic floor must be below Zone 2 high.'); return; }
+    if (c.z2Low >= c.z2High) { toast('Aerobic floor must be below Zone 2 high.'); return; }
     profile.cardio = c;
     Store.set('profile', profile);
-    alert('Weekly goals updated!');
+    toast('Weekly goals updated');
   },
 
   z2FromMax() {
@@ -4076,29 +4123,29 @@ const Settings = {
         if (data.cardio) Store.set('cardio', data.cardio);
         if (data.stravaGym) Store.set('stravaGym', data.stravaGym);
         if (data.pushups) Store.set('pushups', data.pushups);
-        alert('Data imported!');
+        toast('Data imported');
         Nav.go('home');
       } catch {
-        alert('Invalid file.');
+        toast('Invalid file.');
       }
     };
     reader.readAsText(file);
   },
 
-  clearHistory() {
-    if (confirm('Clear all workout and cardio history? Your program progress and maxes will be kept.')) {
+  async clearHistory() {
+    if (await Ask.confirm('Clear all workout and cardio history?', 'Your program progress and maxes will be kept.', { ok: 'Clear history', danger: true })) {
       Store.set('workouts', []);
       Store.set('cardio', []);
       Store.set('stravaGym', []);
       Store.set('activeWorkout', null);
-      alert('History cleared!');
+      toast('History cleared');
       Nav.go('home');
     }
   },
 
   // Keeps history and settings; just goes back to setup for a fresh 13 weeks.
-  newProgram() {
-    if (confirm('Start a new 13-week program? Your history and cardio are kept.')) {
+  async newProgram() {
+    if (await Ask.confirm('Start a new 13-week program?', 'Your history and cardio are kept.', { ok: 'Start new program' })) {
       Store.set('program', null);
       Nav.go('setup');
     }
@@ -4106,8 +4153,8 @@ const Settings = {
 
   // Clears everything here AND on the server (the server keeps an internal
   // version history, so this is recoverable).
-  resetAll() {
-    if (confirm('This will delete ALL data (on the server too) and start fresh. Are you sure?')) {
+  async resetAll() {
+    if (await Ask.confirm('Delete ALL data?', 'This deletes everything, on the server too, and starts fresh.', { ok: 'Delete everything', danger: true })) {
       Store.set('profile', null);
       Store.set('program', null);
       Store.set('workouts', []);
@@ -4390,7 +4437,7 @@ const App = {
       Nav.go('cardio');
       Strava.pull();
     } else if (hash === '#strava=failed') {
-      alert('Strava connection did not complete. Try again from Settings.');
+      toast('Strava connection did not complete. Try again from Settings.');
     }
   }
 };
