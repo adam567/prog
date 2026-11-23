@@ -481,7 +481,7 @@ const BLOCKS = [
           { lift: 'deadlift', pct: 0.725, reps: 7, sets: 2 },
         ],
         acc: [
-          { name: 'Box Jumps', reps: '5', sets: 3, rir: null, defaultWeight: 0 },
+          { name: 'Box Jumps', inputType: 'reps_only', tag: '30″ box', reps: '5', sets: 3, rir: null, defaultWeight: 0 },
         ]
       },
       { name: 'Upper Hypertrophy', label: 'B', main: [],
@@ -530,7 +530,7 @@ const BLOCKS = [
           { lift: 'bench', pct: 0.75, reps: 8, sets: 2 },
           { lift: 'deadlift', pct: 0.75, reps: 6, sets: 2 },
         ],
-        acc: [{ name: 'Box Jumps', reps: '5', sets: 3, rir: null, defaultWeight: 0 }]
+        acc: [{ name: 'Box Jumps', inputType: 'reps_only', tag: '30″ box', reps: '5', sets: 3, rir: null, defaultWeight: 0 }]
       },
       { name: 'Upper Hypertrophy', label: 'B', main: [],
         acc: [
@@ -1477,7 +1477,7 @@ const Planner = {
       const w = a.defaultWeight || 0, sets = [];
       for (let i = 0; i < a.sets; i++) { const r = Array.isArray(a.reps) ? a.reps[i % a.reps.length] : a.reps; sets.push({ goalWeight: w, goalReps: r, actualWeight: w, actualReps: r, isAmrap: false, done: false }); }
       const cut = !keep.has(a);
-      exercises.push({ name: a.name, was: a.was, lift: null, isMain: false, rir: a.rir, ...(a.pair ? { pair: a.pair } : {}), sets, skipped: cut, cutForTime: cut });
+      exercises.push({ name: a.name, was: a.was, lift: null, isMain: false, rir: a.rir, ...(a.inputType ? { inputType: a.inputType } : {}), ...(a.tag ? { tag: a.tag } : {}), ...(a.pair ? { pair: a.pair } : {}), sets, skipped: cut, cutForTime: cut });
     });
 
     const fullSec = S.overhead + mains.reduce((t, x) => t + Math.max(x.n, fillTo) * S.main + (x.weight && !dayDef.isTestDay ? this.WARMUPS.length * S.warm : 0), 0) + accs.reduce((t, a) => t + this.accCost(a, S), 0);
@@ -2025,7 +2025,7 @@ const Workout = {
           </div>
           <div class="set-goal">${ex.name === 'Pullups' ? `${({ none: 'No band', green: 'Green', black: 'Black', both: 'Both' })[s.band || ex.band || 'none']}<br>${s.goalReps}` : s.goalWeight > 0 ? s.goalWeight + ' × ' + s.goalReps : ex.inputType === 'timed' ? (s.done && s.tut ? fmtTime(s.tut) : s.goalReps) : s.goalReps + ' reps'}</div>
           <div class="set-actual">
-            ${ex.inputType === 'reps_only' || ex.inputType === 'timed' ? (BW_LOAD[ex.name] ? `<span class="text-dim text-sm" style="margin-right:6px" title="${Math.round(BW_LOAD[ex.name] * 100)}% of bodyweight">≈${Math.round(BW_LOAD[ex.name] * bodyweight())} lb</span>` : '') : `<button class="adj" onclick="Workout.adjWeight(${ei},${si},-5)">-</button>
+            ${ex.inputType === 'reps_only' || ex.inputType === 'timed' ? ex.tag ? `<span class="text-dim text-sm" style="margin-right:6px">${esc(ex.tag)}</span>` : (BW_LOAD[ex.name] ? `<span class="text-dim text-sm" style="margin-right:6px" title="${Math.round(BW_LOAD[ex.name] * 100)}% of bodyweight">≈${Math.round(BW_LOAD[ex.name] * bodyweight())} lb</span>` : '') : `<button class="adj" onclick="Workout.adjWeight(${ei},${si},-5)">-</button>
             <input type="number" value="${s.actualWeight}" step="5"
               onchange="Workout.setWeight(${ei},${si},this.value)"
               ${done ? 'style="opacity:.6"' : ''}>
@@ -2648,6 +2648,7 @@ const Workout = {
   // Put a running set / EMOM back after a reload or app switch.
   restoreActive() {
     const d = this.data;
+    d.exercises.forEach(ex => { if (ex.name === 'Box Jumps' && !ex.inputType) Object.assign(ex, { inputType: 'reps_only', tag: '30″ box' }); });
     if (d.activeSet && d.activeSet.startTime && d.exercises[d.activeSet.ei]) {
       this.activeSet = { ...d.activeSet };
       Timer.start('working');
@@ -2776,6 +2777,7 @@ const Workout = {
       isMain: false,
       rir: entry.rir != null ? entry.rir : null,
       inputType: entry.inputType || 'weight_reps',
+      ...(entry.tag ? { tag: entry.tag } : {}),
       sets,
       skipped: false,
     };
@@ -4242,7 +4244,7 @@ const CATALOG = [
     { name: 'Chin-ups',                 inputType: 'reps_only', sets: 3, reps: 'max', rir: 2, defaultWeight: 0 },
     { name: 'Pushups',                  inputType: 'reps_only', sets: 3, reps: 'max', rir: 1, defaultWeight: 0 },
     { name: 'Dips',                     inputType: 'reps_only', sets: 3, reps: 'max', rir: 2, defaultWeight: 0 },
-    { name: 'Box Jumps',                inputType: 'reps_only', sets: 3, reps: 5,     rir: null, defaultWeight: 0 },
+    { name: 'Box Jumps',                inputType: 'reps_only', tag: '30″ box', sets: 3, reps: 5,     rir: null, defaultWeight: 0 },
     { name: 'Burpees',                  inputType: 'reps_only', sets: 3, reps: 10,    rir: null, defaultWeight: 0 },
     { name: 'Hanging Leg Raise',        inputType: 'reps_only', sets: 3, reps: 10,    rir: 2, defaultWeight: 0 },
     { name: 'Bulgarian Split Squat',    inputType: 'weight_reps', sets: 2, reps: 10,  rir: 3, defaultWeight: 0 },
