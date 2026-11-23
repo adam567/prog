@@ -64,6 +64,7 @@ select{background:var(--surface2);color:var(--text);border:2px solid var(--surfa
   <div class="row">
     <button class="btn" id="mediaBtn">Arm media keys</button>
     <button class="btn" id="clearBtn">Clear log</button>
+    <button class="btn" id="copyBtn">Copy log</button>
   </div>
   <div class="sub" style="margin:8px 0 0">"Arm media keys" plays silent audio so play/pause/next buttons come to this page. Try the clicker before and after arming it.</div>
 </div>
@@ -162,6 +163,15 @@ $('mediaBtn').onclick = async () => {
   log('media keys armed (silent audio playing)', 'media');
 };
 $('clearBtn').onclick = () => { $('log').innerHTML = ''; raw = presses = dups = 0; for (const k in seen) delete seen[k]; ['nRaw', 'nPress', 'nDup'].forEach(i => $(i).textContent = 0); $('keys').innerHTML = ''; Sim.reset(); };
+
+$('copyBtn').onclick = async () => {
+  const text = 'KEYS SEEN\n' + Object.entries(seen).map(([k, n]) => `${k} x ${n}`).join('\n') +
+    `\n\nraw ${raw} / presses ${presses} / merged ${dups}\n\nLOG (newest first)\n` +
+    [...$('log').childNodes].map(d => d.textContent).join('\n');
+  try { await navigator.clipboard.writeText(text); $('copyBtn').textContent = 'Copied'; }
+  catch { $('copyBtn').textContent = 'Copy failed'; }
+  setTimeout(() => $('copyBtn').textContent = 'Copy log', 1500);
+};
 
 // Focus matters: a key press only reaches the page while it has focus.
 function focusCheck() { $('focuswarn').style.display = document.hasFocus() ? 'none' : 'block'; }
