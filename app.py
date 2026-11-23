@@ -40,8 +40,6 @@ STATIC = {
     "/index.html": ("index.html", "text/html; charset=utf-8"),
     "/manifest.json": ("manifest.json", "application/manifest+json"),
     "/sw.js": ("sw.js", "text/javascript; charset=utf-8"),
-    "/clicker": ("clicker.html", "text/html; charset=utf-8"),  # Bluetooth clicker test page
-    "/clicker.html": ("clicker.html", "text/html; charset=utf-8"),
     "/robots.txt": ("robots.txt", "text/plain; charset=utf-8"),
     "/icon.svg": ("icon.svg", "image/svg+xml"),
 }

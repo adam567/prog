@@ -4462,7 +4462,7 @@ document.addEventListener('visibilitychange', () => {
 // A Bluetooth camera remote acts as a one-key keyboard (the "Android" button
 // sends Enter; the "iOS" button sends Volume Up, which browsers keep for
 // themselves). One press = tapping the bottom bar: start, cancel the
-// countdown, or stop. Tested on /clicker before wiring it in here.
+// countdown, or stop. Worked out on a throwaway test page (git history: clicker.html).
 const Clicker = {
   KEYS: new Set(['Enter', 'NumpadEnter', 'AudioVolumeUp', 'AudioVolumeDown', 'VolumeUp', 'VolumeDown']),
   MERGE_MS: 500, // one press can arrive as several key events
