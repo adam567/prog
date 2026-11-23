@@ -2326,7 +2326,6 @@ const Workout = {
   activeSet: null,  // { ei, si, tapAt, startTime, tick } - one timed set at a time
   emom: null,       // { ei, every (s), t0, order: [set indexes], lastRound, lastBeep }
   COUNTDOWN: 8,     // seconds from tapping ▶ to the clock starting
-  MIN_REST: 90,     // main-lift working sets: warn below this
 
   isActive(ei, si) { return !!(this.activeSet && this.activeSet.ei === ei && this.activeSet.si === si); },
   isEmom(ex) { return /EMOM/i.test(ex.name || ''); },
@@ -2362,11 +2361,10 @@ const Workout = {
     if (!this.data.stravaReminded) {
       this.data.stravaReminded = true;
       this.save();
-      alert('Start Strava recording?\n\nThis is the first set of the workout. Start the Strava recording now so heart rate gets imported.');
+      this.stravaSheet(() => this.startSet(ei, si));
+      return;
     }
     if (this.isEmom(ex)) { this.startEmom(ei); return; }
-    const warn = this.shortRest(ei, si);
-    if (warn && !confirm(warn)) return;
     this.activeSet = { ei, si, tapAt: Date.now(), startTime: null };
     this.save();
     this.render();
@@ -2486,14 +2484,22 @@ const Workout = {
     this.render();
   },
 
-  shortRest(ei, si) {
-    const ex = this.data.exercises[ei], s = ex.sets[si];
-    if (!ex.isMain || s.isWarmup || s.isBackoff) return '';
-    const prev = ex.sets.filter(x => x.done && x.endedAt).sort((a, b) => b.endedAt - a.endedAt)[0];
-    if (!prev || prev.actualWeight < 0.85 * s.actualWeight) return '';
-    const rest = Math.round((Date.now() - prev.endedAt) / 1000);
-    if (rest >= this.MIN_REST) return '';
-    return `Only ${rest}s since your last ${ex.name} set. Main lifts go best with 2-3 min of rest.\n\nOK = start anyway.\nCancel = keep resting.`;
+  // In-app reminder (not a browser alert) on the first Play of a workout.
+  stravaSheet(go) {
+    let el = document.getElementById('reps-sheet');
+    if (el) el.remove();
+    el = document.createElement('div');
+    el.id = 'reps-sheet';
+    el.innerHTML = `<div class="panel">
+      <div style="font-weight:700;font-size:1.1rem">Start Strava recording?</div>
+      <div class="text-dim text-sm mt-8">First set of the workout. Start the Strava recording now so heart rate gets imported.</div>
+      <button class="btn btn-success mt-16 go">It's recording, start set</button>
+      <button class="btn btn-sm btn-outline mt-8 skip">Skip Strava today</button>
+    </div>`;
+    const done = e => { e.preventDefault(); swallowGhostClick(); el.remove(); go(); };
+    el.querySelector('.go').onpointerdown = done;
+    el.querySelector('.skip').onpointerdown = done;
+    document.body.appendChild(el);
   },
 
   cancelSet() {
