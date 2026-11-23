@@ -4458,6 +4458,56 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && Workout.data) Guard.check(true);
 });
 
+// ===================== BLUETOOTH CLICKER =====================
+// A Bluetooth camera remote acts as a one-key keyboard (the "Android" button
+// sends Enter; the "iOS" button sends Volume Up, which browsers keep for
+// themselves). One press = tapping the bottom bar: start, cancel the
+// countdown, or stop. Tested on /clicker before wiring it in here.
+const Clicker = {
+  KEYS: new Set(['Enter', 'NumpadEnter', 'AudioVolumeUp', 'AudioVolumeDown', 'VolumeUp', 'VolumeDown']),
+  MERGE_MS: 500, // one press can arrive as several key events
+  last: 0,
+  // The set a press should start when nothing is running: the next one after
+  // the most recently finished set (its superset partner when paired).
+  nextSet() {
+    const xs = Workout.data.exercises;
+    let last = null;
+    xs.forEach((ex, ei) => { if (!ex.skipped) ex.sets.forEach(s => { if (s.done && s.endedAt && (!last || s.endedAt > last.t)) last = { ei, t: s.endedAt }; }); });
+    if (last) {
+      if (Workout.pairMate(last.ei) >= 0) { const n = Workout.pairNext(last.ei); if (n) return n; }
+      const si = xs[last.ei].sets.findIndex(s => !s.done);
+      if (si >= 0) return { ei: last.ei, si };
+    }
+    const from = last ? last.ei + 1 : 0;
+    for (let k = 0; k < xs.length; k++) {
+      const ei = (from + k) % xs.length;
+      if (xs[ei].skipped) continue;
+      const si = xs[ei].sets.findIndex(s => !s.done);
+      if (si >= 0) return { ei, si };
+    }
+    return null;
+  },
+  onKey(e) {
+    if (!Clicker.KEYS.has(e.key) && ![13, 174, 175].includes(e.keyCode)) return;
+    if (Nav.current !== 'workout' || !Workout.data || Workout.data.pausedAt) return;
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return; // typing
+    if (document.getElementById('reps-sheet')) return; // a question is open: answer it on screen
+    e.preventDefault(); // don't also "click" whatever button has focus
+    e.stopPropagation();
+    if (e.repeat) return;
+    const now = Date.now();
+    if (now - Clicker.last < Clicker.MERGE_MS) return;
+    Clicker.last = now;
+    if (Workout.activeSet || Workout.emom) return Workout.tapActive();
+    const n = Clicker.nextSet();
+    if (!n) return toast('All sets are done.');
+    Workout.startSet(n.ei, n.si);
+    setTimeout(() => { const el = document.getElementById(`set-${n.ei}-${n.si}`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 50);
+  },
+};
+window.addEventListener('keydown', e => Clicker.onKey(e), true);
+
 // ===================== SERVICE WORKER =====================
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
