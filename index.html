@@ -2640,9 +2640,11 @@ const Workout = {
     const e = this.emom, ex = this.data.exercises[e.ei], k = this.emomRound(), N = e.order.length, ms = e.every * 1000;
     const toNext = Math.max(0, Math.ceil((e.t0 + (k + 1) * ms - Date.now()) / 1000));
     if (k < 0) { this.paintBar('countdown', `EMOM starts in ${toNext} · tap to cancel`, false); return; }
-    const s = ex.sets[e.order[k]];
-    if (s && !s.done) this.paintBar('', `■  Round ${k + 1}/${N} done · ${fmtTime(Math.floor((Date.now() - e.t0 - k * ms) / 1000))}`, true);
-    else this.paintBar('rest', k + 1 < N ? `Round ${k + 2}/${N} in ${fmtTime(toNext)}` : 'Last round logged', true);
+    // The clock to the next round always leads; tapping the bar just ticks
+    // off the round in progress (its row gets a ✓) and the clock keeps going.
+    const s = ex.sets[e.order[k]], last = k + 1 >= N;
+    if (s && !s.done) this.paintBar('', last ? `Round ${k + 1}/${N} (last) · tap ✓ when done` : `Next round in ${fmtTime(toNext)} · tap ✓ when round ${k + 1} done`, true);
+    else this.paintBar('rest', last ? 'Last round logged' : `✓ Round ${k + 1}/${N} · next in ${fmtTime(toNext)}`, true);
   },
 
   // Put a running set / EMOM back after a reload or app switch.
