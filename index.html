@@ -2441,7 +2441,7 @@ const Workout = {
     if (!bar) {
       bar = document.createElement('div');
       bar.id = 'set-bar';
-      bar.innerHTML = '<span class="txt"></span><button class="end" onclick="event.stopPropagation();Workout.endEmom()">End</button>';
+      bar.innerHTML = '<span class="txt"></span><button class="end" onclick="event.stopPropagation();Workout.askEndEmom()">End EMOM</button>';
       bar.onclick = () => Workout.tapActive();
       document.body.appendChild(bar);
     }
@@ -2627,6 +2627,14 @@ const Workout = {
     if (k === e.order.length - 1) { this.endEmom(); return; }
     this.save();
     this.render();
+  },
+  // The bar's End button: easy to hit when you meant "round done", so ask.
+  async askEndEmom() {
+    const e = this.emom;
+    if (!e) return;
+    const ex = this.data.exercises[e.ei], left = e.order.filter(i => !ex.sets[i].done).length;
+    if (left && !(await Ask.confirm('End the EMOM early?', `${left} round${left === 1 ? '' : 's'} not logged yet. To log just this round, tap the bar or the round's ▶ instead.`, { ok: 'End EMOM', cancel: 'Keep going', danger: true }))) return;
+    if (this.emom === e) this.endEmom();
   },
   endEmom() {
     clearInterval(this.emomTick);
