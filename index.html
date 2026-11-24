@@ -1971,7 +1971,7 @@ const Workout = {
         const n = ex.sets.filter(s => s.done).length;
         html += `<div class="ex-card" style="opacity:.75"><div class="ex-header" style="cursor:pointer" onclick="Workout.unskip(${ei})">
           <div><span class="name">${esc(ex.name)}</span> <span class="text-dim text-sm">· ${ex.cutForTime ? 'cut for time' : 'skipped'}${n ? ` · ${n} set${n === 1 ? '' : 's'} logged` : ''}</span></div>
-          <button class="btn btn-outline btn-xs" style="width:auto">+ Add back</button></div></div>`;
+          <button class="btn btn-outline btn-xs" style="width:auto">↩ Put back</button></div></div>`;
         return;
       }
       const allDone = ex.sets.every(s => s.done);
@@ -1989,7 +1989,6 @@ const Workout = {
           </div>
           <div>
             ${allDone ? '<span class="badge badge-green">Done</span>' : `<span class="text-dim text-sm">${ex.sets.filter(s => s.done).length}/${ex.sets.length}</span>`}
-            ${!ex.isMain ? `<button class="skip-btn" onclick="Workout.skipExercise(${ei})">skip</button>` : ''}
           </div>
         </div>
         <div class="ex-body">`;
@@ -2075,7 +2074,7 @@ const Workout = {
 
     // Finish button
     const allMainDone = d.exercises.filter(e => e.isMain).every(e => e.sets.filter(s => !s.isWarmup && !s.isExtra && !s.isBackoff).every(s => s.done) || e.skipped);
-    html += `<button class="btn ${allMainDone ? 'btn-success' : 'btn-outline'}" onclick="Workout.finish()" style="margin-bottom:8px">
+    html += `<button class="btn ${allMainDone ? 'btn-success' : 'btn-outline'}" onclick="Workout.askFinish()" style="margin-bottom:8px">
       ${allMainDone ? 'Finish Workout' : 'Finish Early'}
     </button>
     <button class="btn btn-outline btn-sm" onclick="Workout.pause()" style="margin-bottom:24px">⏸ Pause Workout</button></div>`;
@@ -2825,6 +2824,11 @@ const Workout = {
 
   finish() {
     this.saveAndExit(true);
+  },
+  async askFinish() {
+    const left = this.data.exercises.filter(e => !e.skipped).reduce((n, e) => n + e.sets.filter(s => !s.done && !s.isWarmup).length, 0);
+    if (left && !(await Ask.confirm('Finish the workout?', `${left} set${left === 1 ? ' is' : 's are'} not done and will be saved as missed.`, { ok: 'Finish workout', cancel: 'Keep going' }))) return;
+    this.finish();
   },
 
   saveAndExit(completed, opts = {}) {
@@ -3679,7 +3683,7 @@ const HrView = {
     const fixes = this.suggest(sets, pts);
     const setPts = pts.filter(p => sets.some(st => p.ms >= st.start && p.ms <= st.end));
     const drops = sets.filter(x => x.drop60 != null).map(x => x.drop60);
-    const rests = sets.filter(x => x.rest != null).map(x => x.rest);
+    const rests = sets.filter(x => x.rest != null && x.rest >= 0).map(x => x.rest);
     return {
       pts, sets, fixes,
       start: pts.length ? pts[0].ms : t0, end: pts.length ? pts[pts.length - 1].ms : t0,
@@ -3792,7 +3796,7 @@ const HrView = {
     let lastEx = '';
     a.sets.forEach(st => {
       if (st.ex !== lastEx) { h += `<tr><td colspan="5" style="font-weight:700;padding-top:8px">${esc(st.ex)}</td></tr>`; lastEx = st.ex; }
-      h += `<tr><td>${st.lbl || '#'}${st.n}${st.weight ? ` · ${st.weight}×${st.reps}` : ''}</td><td>${st.avg ?? '–'}</td><td>${st.peak ?? '–'}</td><td>${st.rest != null ? fmtTime(st.rest) : '–'}</td><td>${st.drop60 != null ? '−' + st.drop60 : '–'}</td></tr>`;
+      h += `<tr><td>${st.lbl || '#'}${st.n}${st.weight ? ` · ${st.weight}×${st.reps}` : ''}</td><td>${st.avg ?? '–'}</td><td>${st.peak ?? '–'}</td><td>${st.rest == null ? '–' : st.rest < 0 ? '<span style="color:var(--warning)">overlap</span>' : fmtTime(st.rest)}</td><td>${st.drop60 != null ? '−' + st.drop60 : '–'}</td></tr>`;
     });
     return h + '</table>';
   },
