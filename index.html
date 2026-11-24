@@ -1967,7 +1967,13 @@ const Workout = {
       <div style="padding-top:12px">`;
 
     d.exercises.forEach((ex, ei) => {
-      if (ex.skipped) return;
+      if (ex.skipped) {
+        const n = ex.sets.filter(s => s.done).length;
+        html += `<div class="ex-card" style="opacity:.75"><div class="ex-header" style="cursor:pointer" onclick="Workout.unskip(${ei})">
+          <div><span class="name">${esc(ex.name)}</span> <span class="text-dim text-sm">· ${ex.cutForTime ? 'cut for time' : 'skipped'}${n ? ` · ${n} set${n === 1 ? '' : 's'} logged` : ''}</span></div>
+          <button class="btn btn-outline btn-xs" style="width:auto">+ Add back</button></div></div>`;
+        return;
+      }
       const allDone = ex.sets.every(s => s.done);
       const headerClass = allDone ? 'background:var(--surface2)' : '';
       const mate = this.pairMate(ei);
@@ -2055,13 +2061,6 @@ const Workout = {
 
       html += `</div></div>`;
     });
-
-    // Skipped / cut-for-time exercises: one tap to add back
-    const skipped = d.exercises.map((e, i) => ({ e, i })).filter(x => x.e.skipped);
-    if (skipped.length) {
-      html += `<div class="card"><div class="text-sm text-dim mb-8">Not in today's plan (tap to add back)</div>
-        <div class="row gap-8" style="flex-wrap:wrap">${skipped.map(x => `<button class="band-btn" onclick="Workout.unskip(${x.i})">+ ${esc(x.e.name)}</button>`).join('')}</div></div>`;
-    }
 
     // Ad hoc: one-tap quick adds (anything already on the card is left out)
     if (d.adhoc) {
@@ -2751,8 +2750,11 @@ const Workout = {
     this.render();
   },
 
-  skipExercise(ei) {
-    this.data.exercises[ei].skipped = true;
+  async skipExercise(ei) {
+    const ex = this.data.exercises[ei], n = ex.sets.filter(s => s.done).length;
+    if (this.activeSet && this.activeSet.ei === ei) return toast('Stop the running set first.');
+    if (!(await Ask.confirm(`Skip ${ex.name}?`, n ? `Your ${n} logged set${n === 1 ? ' stays' : 's stay'} saved. It folds to one line you can tap to add back.` : 'It folds to one line you can tap to add back.', { ok: 'Skip it', cancel: 'Keep it' }))) return;
+    ex.skipped = true;
     this.save();
     this.render();
   },
@@ -2765,6 +2767,10 @@ const Workout = {
   },
 
   addFromCatalog(entry) {
+    // Re-adding something that was skipped today brings the original back,
+    // with its logged sets, instead of starting a blank copy.
+    const was = this.data.exercises.findIndex(e => e.skipped && e.name === entry.name);
+    if (was >= 0) { toast(`${entry.name} is back where it was.`); return this.unskip(was); }
     const sets = [];
     // Light versions of the main lifts start at a share of the working max.
     let w0 = entry.defaultWeight || 0;
@@ -2857,7 +2863,7 @@ const Workout = {
       minutes: d.minutes || 0,
       plannedMin: d.plannedMin || 0,
       bodyweight: Store.get('profile', {}).bodyweight || 0,
-      exercises: d.exercises.filter(e => !e.skipped).map(e => ({
+      exercises: d.exercises.filter(e => !e.skipped || e.sets.some(s => s.done)).map(e => ({
         name: e.name,
         lift: e.lift,
         isMain: e.isMain,
